@@ -27,11 +27,17 @@ public class RuneLiteSupport {
             | java.awt.event.InputEvent.BUTTON2_DOWN_MASK | java.awt.event.InputEvent.BUTTON3_DOWN_MASK
             | java.awt.event.InputEvent.ALT_GRAPH_DOWN_MASK;
 
+        private boolean buttonHeld;
+
         @Override
         protected void dispatchEvent(AWTEvent event) {
             if (event instanceof java.awt.event.MouseEvent && !(event instanceof java.awt.event.MouseWheelEvent)) {
                 java.awt.event.MouseEvent e = (java.awt.event.MouseEvent) event;
                 int id = e.getID();
+                if (id == java.awt.event.MouseEvent.MOUSE_PRESSED) buttonHeld = true;
+                if (id == java.awt.event.MouseEvent.MOUSE_RELEASED) buttonHeld = false;
+                // Movement with a button held must be a drag (e.g. middle-button camera rotation)
+                if (id == java.awt.event.MouseEvent.MOUSE_MOVED && buttonHeld) id = java.awt.event.MouseEvent.MOUSE_DRAGGED;
                 boolean held = id == java.awt.event.MouseEvent.MOUSE_PRESSED || id == java.awt.event.MouseEvent.MOUSE_DRAGGED;
                 boolean buttonEvent = held || id == java.awt.event.MouseEvent.MOUSE_RELEASED || id == java.awt.event.MouseEvent.MOUSE_CLICKED;
                 if (buttonEvent) {
@@ -148,7 +154,7 @@ public class RuneLiteSupport {
         {"StretchedModePlugin", "true"},
         // The GPU plugin needs desktop OpenGL, which doesn't exist here
         {"GpuPlugin", "false"},
-        // Rewrites camera targets every frame, fighting the touch camera control (see rotateCamera)
+        // Rewrites camera targets every frame, making touch camera drags snap back
         {"CameraSmoothingPlugin", "false"},
     };
 
@@ -378,15 +384,11 @@ public class RuneLiteSupport {
 
     // net.runelite.api.Client and the methods we drive directly
     private static volatile Object client;
-    private static Method getYawTarget, setYawTarget, getPitchTarget, setPitchTarget, getFps;
+    private static Method getFps;
 
     private static void initClient(ClassLoader loader, Object injector) throws Exception {
         Class<?> clientClass = loader.loadClass("net.runelite.api.Client");
         Object c = loader.loadClass("com.google.inject.Injector").getMethod("getInstance", Class.class).invoke(injector, clientClass);
-        getYawTarget = clientClass.getMethod("getCameraYawTarget");
-        setYawTarget = clientClass.getMethod("setCameraYawTarget", int.class);
-        getPitchTarget = clientClass.getMethod("getCameraPitchTarget");
-        setPitchTarget = clientClass.getMethod("setCameraPitchTarget", int.class);
         getFps = clientClass.getMethod("getFPS");
         final Method setUnlockedFps = clientClass.getMethod("setUnlockedFps", boolean.class);
         final Method setUnlockedFpsTarget = clientClass.getMethod("setUnlockedFpsTarget", int.class);
@@ -413,34 +415,6 @@ public class RuneLiteSupport {
     }
 
     private static final int TARGET_FPS = 60;
-    // Camera units: yaw is 0-2047 for a full turn, pitch is clamped to the game's normal range
-    // A drag across the whole screen turns the camera about half way round
-    private static final double YAW_PER_PIXEL = 0.8;
-    private static final double PITCH_PER_PIXEL = 0.6;
-    private static final int PITCH_MIN = 128, PITCH_MAX = 383;
-    private static double yawRemainder, pitchRemainder;
-
-    /**
-     * Rotate the camera by a finger drag of (dx, dy) screen pixels, like OSRS mobile: the world follows the finger.
-     * Setting the camera targets directly avoids emulating a middle-button drag, which Caciocavallo mangles.
-     */
-    public static void rotateCamera(int dx, int dy) {
-        Object c = client;
-        if (c == null) return;
-        try {
-            yawRemainder += dx * YAW_PER_PIXEL;
-            pitchRemainder += dy * PITCH_PER_PIXEL;
-            int yawStep = (int) yawRemainder, pitchStep = (int) pitchRemainder;
-            yawRemainder -= yawStep;
-            pitchRemainder -= pitchStep;
-            int yaw = ((int) getYawTarget.invoke(c) + yawStep) & 2047;
-            int pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, (int) getPitchTarget.invoke(c) + pitchStep));
-            setYawTarget.invoke(c, yaw);
-            setPitchTarget.invoke(c, pitch);
-        } catch (Throwable e) {
-            System.out.println("RuneLiteSupport: rotateCamera failed: " + e);
-        }
-    }
 
     /**
      * Positive amount scrolls down (zooms the camera out in OSRS). Caciocavallo's robot ignores the wheel, so
