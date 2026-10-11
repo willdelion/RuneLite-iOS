@@ -11,7 +11,9 @@ PROVISION=~/Developer/RuneLiteIOS-provision
 # Refresh the profile through the stub project (Xcode handles the Apple ID side)
 xcodebuild -project $PROVISION/Stub.xcodeproj -scheme Stub -configuration Debug \
   -destination 'generic/platform=iOS' -allowProvisioningUpdates build -quiet
-PROF=$(grep -l "$BUNDLE_ID" ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision | xargs ls -t | head -1)
+PROF=$(ls -t ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision | while read -r p; do
+  grep -q "$BUNDLE_ID" "$p" && { echo "$p"; break; }
+done)
 
 W=$PROVISION/sign; rm -rf $W; mkdir -p $W
 cp -R artifacts/Payload/AngelAuraAmethyst.app $W/
