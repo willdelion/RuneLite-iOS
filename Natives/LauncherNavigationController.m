@@ -4,6 +4,7 @@
 #import "ALTServerConnection.h"
 #import "CustomControlsViewController.h"
 #import "DownloadProgressViewController.h"
+#import "JagexAccount.h"
 #import "JavaGUIViewController.h"
 #import "LauncherMenuViewController.h"
 #import "LauncherNavigationController.h"
@@ -261,6 +262,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [NSFileManager.defaultManager copyItemAtPath:bundled toPath:jar error:nil];
     }
     setenv("GAME_DIR", dir.UTF8String, 1);
+    [JagexAccount applyEnvironment];
     [self enterModInstallerWithPath:jar hitEnterAfterWindowShown:NO];
 }
 

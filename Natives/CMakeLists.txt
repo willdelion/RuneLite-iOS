@@ -143,6 +143,7 @@ add_executable(AngelAuraAmethyst
   DownloadProgressViewController.m
   FileListViewController.m
   GameSurfaceView.m
+  JagexAccount.m
   JavaGUIViewController.m
   LauncherMenuViewController.m
   LauncherNavigationController.m
@@ -197,6 +198,7 @@ target_link_libraries(AngelAuraAmethyst
   "-framework GameController"
   "-framework IOKit"
   "-framework QuartzCore"
+  "-framework Security"
   "-framework UIKit"
   "-framework UniformTypeIdentifiers"
   "-framework UnzipKit"
