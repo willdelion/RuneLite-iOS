@@ -175,6 +175,72 @@ public class RuneLiteSupport {
         }
     }
 
+    // Max distance (in screen pixels) a tap may miss a Swing button by and still hit it
+    private static final int SNAP_RADIUS = 28;
+    // Width of the strip along the game canvas' right edge that may snap to the sidebar
+    private static final int CANVAS_EDGE_BAND = 12;
+
+    /**
+     * Fingers are much less precise than a mouse and RuneLite's sidebar/panel buttons are tiny:
+     * if a tap lands near (but not on) a Swing button, move it to that button's centre.
+     * Called from native code; returns the point packed as (x << 32) | y.
+     */
+    public static long snapToButton(int x, int y) {
+        long original = ((long) x << 32) | (y & 0xffffffffL);
+        try {
+            for (Frame frame : Frame.getFrames()) {
+                if (!frame.isShowing()) continue;
+                Point origin = frame.getLocationOnScreen();
+                Point p = new Point(x - origin.x, y - origin.y);
+                Component hit = javax.swing.SwingUtilities.getDeepestComponentAt(frame, p.x, p.y);
+                // Leave exact button hits alone
+                if (hit instanceof javax.swing.AbstractButton
+                    || javax.swing.SwingUtilities.getAncestorOfClass(javax.swing.AbstractButton.class, hit) != null) {
+                    return original;
+                }
+                int minX = Integer.MIN_VALUE;
+                if (hit instanceof Canvas) {
+                    // Taps on the game stay on the game, except in a thin band along its right edge next to the
+                    // sidebar, where they may only snap to buttons outside the canvas
+                    Rectangle game = javax.swing.SwingUtilities.convertRectangle(hit.getParent(), hit.getBounds(), frame);
+                    int right = game.x + game.width;
+                    if (p.x < right - CANVAS_EDGE_BAND) {
+                        return original;
+                    }
+                    minX = right;
+                }
+                Rectangle[] best = new Rectangle[1];
+                findNearestButton(frame, frame, p, minX, best, new double[]{SNAP_RADIUS});
+                if (best[0] == null) return original;
+                Rectangle r = best[0];
+                return ((long) (origin.x + r.x + r.width / 2) << 32) | ((origin.y + r.y + r.height / 2) & 0xffffffffL);
+            }
+        } catch (Throwable e) {
+            System.out.println("RuneLiteSupport: snapToButton failed: " + e);
+        }
+        return original;
+    }
+
+    private static void findNearestButton(Frame frame, Container parent, Point p, int minX, Rectangle[] best, double[] bestDistance) {
+        for (Component c : parent.getComponents()) {
+            if (!c.isShowing()) continue;
+            if (c instanceof javax.swing.AbstractButton) {
+                if (!c.isEnabled()) continue;
+                Rectangle r = javax.swing.SwingUtilities.convertRectangle(c.getParent(), c.getBounds(), frame);
+                if (r.x < minX) continue;
+                double dx = Math.max(Math.max(r.x - p.x, 0), p.x - (r.x + r.width));
+                double dy = Math.max(Math.max(r.y - p.y, 0), p.y - (r.y + r.height));
+                double d = Math.hypot(dx, dy);
+                if (d < bestDistance[0]) {
+                    bestDistance[0] = d;
+                    best[0] = r;
+                }
+            } else if (c instanceof Container) {
+                findNearestButton(frame, (Container) c, p, minX, best, bestDistance);
+            }
+        }
+    }
+
     /** Positive amount scrolls down (zooms the camera out in OSRS). */
     public static void mouseWheel(int amount) {
         try {
