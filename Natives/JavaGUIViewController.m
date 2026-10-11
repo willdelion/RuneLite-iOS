@@ -598,6 +598,64 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 
 #pragma mark - RuneLite gestures
 
+// Touch controls modelled on OSRS mobile:
+//   tap                      -> left click (near-misses snap to RuneLite's small Swing buttons)
+//   drag on the game         -> rotate the camera (middle-button drag)
+//   drag on RuneLite panels  -> scroll (mouse wheel)
+//   pinch                    -> zoom (mouse wheel)
+//   hold, release            -> right click (menu)
+//   hold, then drag          -> left-button drag (move inventory items, sliders)
+
+static jclass runeLiteSupportClass(void) {
+    static jclass cls;
+    if (!cls && runtimeJNIEnvPtr) {
+        jclass local = (*runtimeJNIEnvPtr)->FindClass(runtimeJNIEnvPtr, "net/kdt/pojavlaunch/uikit/RuneLiteSupport");
+        if (local) {
+            cls = (*runtimeJNIEnvPtr)->NewGlobalRef(runtimeJNIEnvPtr, local);
+        } else {
+            (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+        }
+    }
+    return cls;
+}
+
+static void runeLiteWheel(CGPoint at, int amount) {
+    static jmethodID wheel;
+    jclass cls = runeLiteSupportClass();
+    if (!cls) return;
+    if (!wheel) wheel = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "mouseWheel", "(III)V");
+    (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, wheel, (int)at.x, (int)at.y, amount);
+    if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+}
+
+// Caciocavallo only maps the left button correctly; tell the Java side which button is really pressed
+static void runeLiteMouseButton(int mask, BOOL down) {
+    if (down) {
+        static jmethodID setActive;
+        jclass cls = runeLiteSupportClass();
+        if (cls) {
+            if (!setActive) setActive = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "setActiveButton", "(I)V");
+            int button = mask == BUTTON3_DOWN_MASK ? 3 : mask == BUTTON2_DOWN_MASK ? 2 : 1;
+            (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, setActive, button);
+            if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+        }
+    }
+    AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, mask, down, 0, 0);
+}
+
+static BOOL runeLiteIsOverGame(int x, int y) {
+    static jmethodID method;
+    jclass cls = runeLiteSupportClass();
+    if (!cls) return YES;
+    if (!method) method = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "isOverGame", "(II)Z");
+    jboolean result = (*runtimeJNIEnvPtr)->CallStaticBooleanMethod(runtimeJNIEnvPtr, cls, method, x, y);
+    if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) {
+        (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+        return YES;
+    }
+    return result;
+}
+
 - (void)setupRuneLiteGestures {
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(runeLiteTap:)];
     [surfaceView addGestureRecognizer:tap];
@@ -611,22 +669,16 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     drag.maximumNumberOfTouches = 1;
     [surfaceView addGestureRecognizer:drag];
 
-    UIPanGestureRecognizer *camera = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(runeLiteCamera:)];
-    camera.minimumNumberOfTouches = 2;
-    camera.maximumNumberOfTouches = 2;
-    camera.delegate = self;
-    [surfaceView addGestureRecognizer:camera];
-
     UIPinchGestureRecognizer *pinch = [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(runeLitePinch:)];
-    pinch.delegate = self;
     [surfaceView addGestureRecognizer:pinch];
 
     [tap requireGestureRecognizerToFail:longPress];
 }
 
-// Rotating the camera and zooming at the same time is fine
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
-    return isRuneLiteMode && ([gestureRecognizer isKindOfClass:UIPinchGestureRecognizer.class] || [other isKindOfClass:UIPinchGestureRecognizer.class]);
+- (CGPoint)runeLiteBufferPoint:(UIGestureRecognizer *)sender {
+    CGPoint p = [sender locationInView:surfaceView];
+    return CGPointMake((int)(p.x * windowWidth / surfaceView.bounds.size.width),
+                       (int)(p.y * windowHeight / surfaceView.bounds.size.height));
 }
 
 - (void)runeLiteMoveTo:(UIGestureRecognizer *)sender {
@@ -634,100 +686,129 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 }
 
 - (void)runeLiteMoveTo:(UIGestureRecognizer *)sender snapToButtons:(BOOL)snap {
-    CGPoint p = [sender locationInView:surfaceView];
-    int x = (int)(p.x * windowWidth / surfaceView.bounds.size.width);
-    int y = (int)(p.y * windowHeight / surfaceView.bounds.size.height);
-    if (snap && runtimeJNIEnvPtr) {
+    CGPoint p = [self runeLiteBufferPoint:sender];
+    int x = p.x, y = p.y;
+    jclass cls = snap ? runeLiteSupportClass() : NULL;
+    if (cls) {
         // Let near-misses on RuneLite's small Swing buttons (sidebar tabs etc.) still hit them
-        static jclass cls;
         static jmethodID snapMethod;
-        if (!snapMethod) {
-            jclass local = (*runtimeJNIEnvPtr)->FindClass(runtimeJNIEnvPtr, "net/kdt/pojavlaunch/uikit/RuneLiteSupport");
-            if (local) {
-                cls = (*runtimeJNIEnvPtr)->NewGlobalRef(runtimeJNIEnvPtr, local);
-                snapMethod = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "snapToButton", "(II)J");
-            }
-            if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
-        }
-        if (snapMethod) {
-            jlong packed = (*runtimeJNIEnvPtr)->CallStaticLongMethod(runtimeJNIEnvPtr, cls, snapMethod, x, y);
-            if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) {
-                (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
-            } else {
-                x = (int)(packed >> 32);
-                y = (int)(packed & 0xffffffff);
-            }
+        if (!snapMethod) snapMethod = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "snapToButton", "(II)J");
+        jlong packed = (*runtimeJNIEnvPtr)->CallStaticLongMethod(runtimeJNIEnvPtr, cls, snapMethod, x, y);
+        if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) {
+            (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+        } else {
+            x = (int)(packed >> 32);
+            y = (int)(packed & 0xffffffff);
         }
     }
     NSDebugLog(@"[RuneLite] %@ state=%ld -> (%d, %d) of %dx%d", NSStringFromClass(sender.class), (long)sender.state, x, y, windowWidth, windowHeight);
     AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, x, y, 0, 0);
 }
 
-- (void)runeLiteTap:(UITapGestureRecognizer *)sender {
-    if (sender.state != UIGestureRecognizerStateRecognized) return;
-    [self runeLiteMoveTo:sender snapToButtons:YES];
-    AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON1_DOWN_MASK, 1, 0, 0);
+- (void)runeLiteClick:(int)button {
+    runeLiteMouseButton(button, YES);
     // The game polls input on its own tick; an instant press+release can be missed
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON1_DOWN_MASK, 0, 0, 0);
+        runeLiteMouseButton(button, NO);
     });
 }
 
+- (void)runeLiteTap:(UITapGestureRecognizer *)sender {
+    if (sender.state != UIGestureRecognizerStateRecognized) return;
+    [self runeLiteMoveTo:sender snapToButtons:YES];
+    [self runeLiteClick:BUTTON1_DOWN_MASK];
+}
+
+// Hold: release in place opens the menu; moving after the hold drags with the left button
 - (void)runeLiteLongPress:(UILongPressGestureRecognizer *)sender {
-    [self runeLiteMoveTo:sender];
-    if (sender.state == UIGestureRecognizerStateBegan) {
-        UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-        [haptic impactOccurred];
-        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON3_DOWN_MASK, 1, 0, 0);
-    } else if (sender.state >= UIGestureRecognizerStateEnded) {
-        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON3_DOWN_MASK, 0, 0, 0);
+    static CGPoint start;
+    static BOOL dragging;
+    CGPoint p = [self runeLiteBufferPoint:sender];
+    switch (sender.state) {
+        case UIGestureRecognizerStateBegan: {
+            start = p;
+            dragging = NO;
+            [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+            [self runeLiteMoveTo:sender];
+            break;
+        }
+        case UIGestureRecognizerStateChanged:
+            if (!dragging && hypot(p.x - start.x, p.y - start.y) > 12 * RUNELITE_RENDER_SCALE) {
+                dragging = YES;
+                AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, (int)start.x, (int)start.y, 0, 0);
+                runeLiteMouseButton(BUTTON1_DOWN_MASK, YES);
+            }
+            if (dragging) [self runeLiteMoveTo:sender];
+            break;
+        case UIGestureRecognizerStateEnded:
+            if (dragging) {
+                [self runeLiteMoveTo:sender];
+                runeLiteMouseButton(BUTTON1_DOWN_MASK, NO);
+            } else {
+                [self runeLiteMoveTo:sender];
+                [self runeLiteClick:BUTTON3_DOWN_MASK];
+            }
+            dragging = NO;
+            break;
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed:
+            if (dragging) runeLiteMouseButton(BUTTON1_DOWN_MASK, NO);
+            dragging = NO;
+            break;
+        default:
+            break;
     }
 }
 
-- (void)runeLiteDragWithButton:(int)button sender:(UIGestureRecognizer *)sender {
-    [self runeLiteMoveTo:sender];
-    if (sender.state == UIGestureRecognizerStateBegan) {
-        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, button, 1, 0, 0);
-    } else if (sender.state >= UIGestureRecognizerStateEnded) {
-        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, button, 0, 0, 0);
-    }
-}
-
+// Drag: rotate the camera over the game, scroll over RuneLite's panels
 - (void)runeLiteDrag:(UIPanGestureRecognizer *)sender {
-    [self runeLiteDragWithButton:BUTTON1_DOWN_MASK sender:sender];
-}
-
-// OSRS rotates the camera while the middle mouse button is dragged
-- (void)runeLiteCamera:(UIPanGestureRecognizer *)sender {
-    [self runeLiteDragWithButton:BUTTON2_DOWN_MASK sender:sender];
+    static BOOL camera;
+    static CGFloat scrolled;
+    CGPoint p = [self runeLiteBufferPoint:sender];
+    if (sender.state == UIGestureRecognizerStateBegan) {
+        // Decide from where the finger went down, not where the pan was recognised
+        CGPoint t = [sender translationInView:surfaceView];
+        CGPoint origin = CGPointMake(p.x - t.x * windowWidth / surfaceView.bounds.size.width,
+                                     p.y - t.y * windowHeight / surfaceView.bounds.size.height);
+        camera = runeLiteIsOverGame((int)origin.x, (int)origin.y);
+        scrolled = 0;
+        if (camera) {
+            AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, (int)origin.x, (int)origin.y, 0, 0);
+            runeLiteMouseButton(BUTTON2_DOWN_MASK, YES);
+        } else {
+            [self runeLiteMoveTo:sender];
+        }
+    }
+    if (camera) {
+        [self runeLiteMoveTo:sender];
+        if (sender.state >= UIGestureRecognizerStateEnded) {
+            runeLiteMouseButton(BUTTON2_DOWN_MASK, NO);
+        }
+        return;
+    }
+    // Natural scrolling: content follows the finger, one wheel notch per ~16pt
+    CGFloat dy = [sender translationInView:surfaceView].y;
+    const CGFloat notch = 16;
+    while (dy - scrolled <= -notch) { scrolled -= notch; runeLiteWheel(p, 1); }
+    while (dy - scrolled >= notch) { scrolled += notch; runeLiteWheel(p, -1); }
 }
 
 - (void)runeLitePinch:(UIPinchGestureRecognizer *)sender {
     static CGFloat lastScale;
-    static jclass cls;
-    static jmethodID wheel;
     if (sender.state == UIGestureRecognizerStateBegan) {
         lastScale = 1;
         [self runeLiteMoveTo:sender];
     }
-    if (!runtimeJNIEnvPtr) return;
-    if (!wheel) {
-        cls = (*runtimeJNIEnvPtr)->FindClass(runtimeJNIEnvPtr, "net/kdt/pojavlaunch/uikit/RuneLiteSupport");
-        if (!cls) {
-            (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
-            return;
-        }
-        cls = (*runtimeJNIEnvPtr)->NewGlobalRef(runtimeJNIEnvPtr, cls);
-        wheel = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "mouseWheel", "(I)V");
+    // One wheel notch per 6% of pinch; scrolling up (negative) zooms in
+    const CGFloat step = 1.06;
+    CGPoint at = [self runeLiteBufferPoint:sender];
+    while (sender.scale > lastScale * step) {
+        lastScale *= step;
+        runeLiteWheel(at, -1);
     }
-    // One wheel notch per 12% of pinch; scrolling up (negative) zooms in
-    while (sender.scale > lastScale * 1.12) {
-        lastScale *= 1.12;
-        (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, wheel, -1);
-    }
-    while (sender.scale < lastScale / 1.12) {
-        lastScale /= 1.12;
-        (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, wheel, 1);
+    while (sender.scale < lastScale / step) {
+        lastScale /= step;
+        runeLiteWheel(at, 1);
     }
 }
 
