@@ -16,6 +16,8 @@ static BOOL shouldHitEnterAfterWindowShown;
 static SurfaceView* surfaceView;
 // RuneLite mode: landscape, fixed render scale and desktop-style touch gestures
 static BOOL isRuneLiteMode;
+// Horizontal inset (points) keeping RuneLite clear of the rounded corners and the Dynamic Island in landscape
+static CGFloat runeLiteSideInset;
 #define RUNELITE_RENDER_SCALE 1.5
 
 static jclass class_CTCAndroidInput;
@@ -220,6 +222,7 @@ void AWTInputBridge_sendKey(int keycode) {
 
 @property(nonatomic) TrackedTextField* inputTextField;
 @property(nonatomic) ControlLayout* ctrlView;
+@property(nonatomic) NSArray<UIButton *> *runeLiteSideButtons;
 @property(nonatomic) PLLogOutputView* logOutputView;
 @property(nonatomic) ScrollableSurfaceView* surfaceScrollView;
 
@@ -241,7 +244,11 @@ void AWTInputBridge_sendKey(int keycode) {
     if (isRuneLiteMode) {
         // The view may still be portrait here; RuneLite always runs in landscape
         CGSize size = UIScreen.mainScreen.bounds.size;
-        screenBounds.size = CGSizeMake(MAX(size.width, size.height), MIN(size.width, size.height));
+        // In landscape the side insets equal the portrait top inset (island/notch side); take the largest
+        // inset so this works whichever orientation the launcher was in
+        UIEdgeInsets insets = UIApplication.sharedApplication.windows.firstObject.safeAreaInsets;
+        runeLiteSideInset = MAX(MAX(insets.top, insets.bottom), MAX(insets.left, insets.right));
+        screenBounds.size = CGSizeMake(MAX(size.width, size.height) - 2 * runeLiteSideInset, MIN(size.width, size.height));
         screenScale = RUNELITE_RENDER_SCALE;
         virtualMouseEnabled = NO;
     }
@@ -307,6 +314,14 @@ void AWTInputBridge_sendKey(int keycode) {
     self.ctrlView = [[ControlLayout alloc] initWithFrame:UIEdgeInsetsInsetRect(self.view.frame, self.view.safeAreaInsets)];
     [self.view addSubview:self.ctrlView];
     [self loadCustomControls];
+    if (isRuneLiteMode) {
+        // The on-screen control layout would cover RuneLite's sidebar; use icons in the empty side band instead
+        self.ctrlView.hidden = YES;
+        self.runeLiteSideButtons = @[
+            [self runeLiteSideButton:@"keyboard" action:@selector(toggleSoftKeyboard)],
+            [self runeLiteSideButton:@"text.alignleft" action:@selector(runeLiteToggleLog)],
+        ];
+    }
 
     self.logOutputView = [[PLLogOutputView alloc] initWithFrame:self.view.frame];
     self.logOutputView.navController.additionalSafeAreaInsets = self.view.safeAreaInsets;
@@ -548,15 +563,37 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     if (!isRuneLiteMode) return;
-    // Views are created before the landscape rotation; the surface has no autoresizing of its own
-    self.surfaceScrollView.frame = self.view.bounds;
-    self.surfaceScrollView.contentSize = self.view.bounds.size;
-    surfaceView.frame = self.view.bounds;
+    // Views are created before the landscape rotation; the surface has no autoresizing of its own.
+    // Keep it between the side insets so RuneLite's sidebar isn't hidden under the screen corners.
+    CGRect content = CGRectInset(self.view.bounds, runeLiteSideInset, 0);
+    self.surfaceScrollView.frame = content;
+    self.surfaceScrollView.contentSize = content.size;
+    surfaceView.frame = (CGRect){CGPointZero, content.size};
+    // Side buttons live in the left band, clear of the Dynamic Island in the middle of the edge
+    CGFloat bandCenter = runeLiteSideInset / 2;
+    CGFloat height = self.view.bounds.size.height;
+    for (NSUInteger i = 0; i < self.runeLiteSideButtons.count; i++) {
+        self.runeLiteSideButtons[i].center = CGPointMake(MAX(bandCenter, 22), i == 0 ? height * 0.2 : height * 0.8);
+    }
     CGRect ctrlFrame = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
     if (!CGRectEqualToRect(self.ctrlView.frame, ctrlFrame)) {
         self.ctrlView.frame = ctrlFrame;
         [self.ctrlView.subviews makeObjectsPerformSelector:@selector(update)];
     }
+}
+
+- (UIButton *)runeLiteSideButton:(NSString *)symbol action:(SEL)action {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.frame = CGRectMake(0, 0, 44, 44);
+    [button setImage:[UIImage systemImageNamed:symbol] forState:UIControlStateNormal];
+    button.tintColor = [UIColor colorWithWhite:1 alpha:0.6];
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:button];
+    return button;
+}
+
+- (void)runeLiteToggleLog {
+    [self.logOutputView actionToggleLogOutput];
 }
 
 #pragma mark - RuneLite gestures
@@ -593,16 +630,42 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 }
 
 - (void)runeLiteMoveTo:(UIGestureRecognizer *)sender {
+    [self runeLiteMoveTo:sender snapToButtons:NO];
+}
+
+- (void)runeLiteMoveTo:(UIGestureRecognizer *)sender snapToButtons:(BOOL)snap {
     CGPoint p = [sender locationInView:surfaceView];
     int x = (int)(p.x * windowWidth / surfaceView.bounds.size.width);
     int y = (int)(p.y * windowHeight / surfaceView.bounds.size.height);
+    if (snap && runtimeJNIEnvPtr) {
+        // Let near-misses on RuneLite's small Swing buttons (sidebar tabs etc.) still hit them
+        static jclass cls;
+        static jmethodID snapMethod;
+        if (!snapMethod) {
+            jclass local = (*runtimeJNIEnvPtr)->FindClass(runtimeJNIEnvPtr, "net/kdt/pojavlaunch/uikit/RuneLiteSupport");
+            if (local) {
+                cls = (*runtimeJNIEnvPtr)->NewGlobalRef(runtimeJNIEnvPtr, local);
+                snapMethod = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "snapToButton", "(II)J");
+            }
+            if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+        }
+        if (snapMethod) {
+            jlong packed = (*runtimeJNIEnvPtr)->CallStaticLongMethod(runtimeJNIEnvPtr, cls, snapMethod, x, y);
+            if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) {
+                (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+            } else {
+                x = (int)(packed >> 32);
+                y = (int)(packed & 0xffffffff);
+            }
+        }
+    }
     NSDebugLog(@"[RuneLite] %@ state=%ld -> (%d, %d) of %dx%d", NSStringFromClass(sender.class), (long)sender.state, x, y, windowWidth, windowHeight);
     AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, x, y, 0, 0);
 }
 
 - (void)runeLiteTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateRecognized) return;
-    [self runeLiteMoveTo:sender];
+    [self runeLiteMoveTo:sender snapToButtons:YES];
     AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON1_DOWN_MASK, 1, 0, 0);
     // The game polls input on its own tick; an instant press+release can be missed
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
