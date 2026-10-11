@@ -11,7 +11,43 @@ public class RuneLiteSupport {
     private static Object robotPeer;
     private static Method mouseWheel;
 
+    /**
+     * Caciocavallo occasionally posts MOUSE_PRESSED/RELEASED events with no button. AWT's LightweightDispatcher
+     * throws on those ("button doesn't exist 0"), leaving Swing's mouse grab in a broken state, so infer the
+     * button instead: from the held-button modifiers on press, or the last pressed button on release.
+     */
+    private static class MouseButtonFixQueue extends EventQueue {
+        private int lastButton = java.awt.event.MouseEvent.BUTTON1;
+
+        @Override
+        protected void dispatchEvent(AWTEvent event) {
+            if (event instanceof java.awt.event.MouseEvent) {
+                java.awt.event.MouseEvent e = (java.awt.event.MouseEvent) event;
+                int id = e.getID();
+                boolean buttonEvent = id == java.awt.event.MouseEvent.MOUSE_PRESSED
+                    || id == java.awt.event.MouseEvent.MOUSE_RELEASED
+                    || id == java.awt.event.MouseEvent.MOUSE_CLICKED;
+                if (buttonEvent && e.getButton() == java.awt.event.MouseEvent.NOBUTTON) {
+                    int button = id == java.awt.event.MouseEvent.MOUSE_PRESSED ? buttonFromModifiers(e.getModifiersEx()) : lastButton;
+                    event = new java.awt.event.MouseEvent(e.getComponent(), id, e.getWhen(), e.getModifiersEx(),
+                        e.getX(), e.getY(), e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(), e.isPopupTrigger(), button);
+                } else if (id == java.awt.event.MouseEvent.MOUSE_PRESSED) {
+                    lastButton = e.getButton();
+                }
+            }
+            super.dispatchEvent(event);
+        }
+
+        private int buttonFromModifiers(int modifiersEx) {
+            if ((modifiersEx & java.awt.event.InputEvent.BUTTON3_DOWN_MASK) != 0) return java.awt.event.MouseEvent.BUTTON3;
+            if ((modifiersEx & java.awt.event.InputEvent.BUTTON2_DOWN_MASK) != 0) return java.awt.event.MouseEvent.BUTTON2;
+            return java.awt.event.MouseEvent.BUTTON1;
+        }
+    }
+
     public static void start() {
+        Toolkit.getDefaultToolkit().getSystemEventQueue().push(new MouseButtonFixQueue());
+
         Thread fitter = new Thread(RuneLiteSupport::fitFramesLoop, "RuneLite-iOS-FrameFitter");
         fitter.setDaemon(true);
         fitter.start();
