@@ -75,7 +75,10 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
         if (error) {
             message = error.localizedDescription;
         } else if (status != 200 || !json) {
-            message = [NSString stringWithFormat:@"%@ returned HTTP %ld", request.URL.path, (long)status];
+            // Error bodies are OAuth error codes/descriptions, never tokens
+            NSString *body = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"";
+            if (body.length > 300) body = [body substringToIndex:300];
+            message = [NSString stringWithFormat:@"%@ returned HTTP %ld %@", request.URL.path, (long)status, body ?: @""];
         }
         dispatch_async(dispatch_get_main_queue(), ^{
             completion(message ? nil : json, message);
@@ -91,6 +94,9 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
 @property(nonatomic, copy) NSString *verifier, *state, *nonce;
 @property(nonatomic, copy) void (^completion)(NSString *sessionId, NSString *error);
 @property(nonatomic) BOOL finished;
+// Each redirect must be handled once: cancelling it also reports a failed load for the same URL,
+// and replaying the one-time authorization code makes the token endpoint answer HTTP 400
+@property(nonatomic) BOOL codeHandled, consentHandled;
 @end
 
 @implementation JagexLoginViewController
@@ -158,6 +164,8 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
 - (BOOL)handleURL:(NSURL *)url {
     if (!url) return NO;
     if ([url.absoluteString hasPrefix:kLauncherRedirect]) {
+        if (self.codeHandled) return YES;
+        self.codeHandled = YES;
         NSDictionary *params = parseParams(url.query);
         if (![params[@"state"] isEqualToString:self.state] || !params[@"code"]) {
             [self finishWithSession:nil error:params[@"error_description"] ?: @"Unexpected response from the Jagex login page."];
@@ -167,6 +175,8 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
         return YES;
     }
     if ([url.host isEqualToString:@"localhost"]) {
+        if (self.consentHandled) return YES;
+        self.consentHandled = YES;
         NSDictionary *params = parseParams(url.fragment ?: url.query);
         NSString *idToken = params[@"id_token"];
         if (![params[@"state"] isEqualToString:self.state] || !idToken) {
