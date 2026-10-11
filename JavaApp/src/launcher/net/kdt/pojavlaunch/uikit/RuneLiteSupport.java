@@ -73,9 +73,10 @@ public class RuneLiteSupport {
     }
 
     // Phone-friendly defaults, applied once per RuneLite profile so the player can change them afterwards
-    private static final String DEFAULTS_VERSION = "3";
+    private static final String DEFAULTS_VERSION = "4";
     private static final String[][] DEFAULT_CONFIG = {
-        {"stretchedmode", "keepAspectRatio", "true"},
+        // Fill the whole wide phone screen; fixed mode gets stretched horizontally
+        {"stretchedmode", "keepAspectRatio", "false"},
         {"stretchedmode", "increasedPerformance", "true"},
         // No window title bar on a phone screen (takes effect on the next launch)
         {"runelite", "uiEnableCustomChrome", "false"},
