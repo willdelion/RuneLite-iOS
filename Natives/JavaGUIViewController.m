@@ -763,7 +763,8 @@ static BOOL runeLiteIsOverGame(int x, int y) {
 // Drag: rotate the camera over the game (the game's own middle-button drag, which handles speed and
 // wrapping past north), scroll over RuneLite's panels
 - (void)runeLiteDrag:(UIPanGestureRecognizer *)sender {
-    static BOOL camera;
+    static BOOL camera, cameraPressed;
+    static NSUInteger gestureId;
     static CGFloat scrolled;
     CGPoint p = [self runeLiteBufferPoint:sender];
     if (sender.state == UIGestureRecognizerStateBegan) {
@@ -774,16 +775,31 @@ static BOOL runeLiteIsOverGame(int x, int y) {
         camera = runeLiteIsOverGame((int)origin.x, (int)origin.y);
         scrolled = 0;
         if (camera) {
+            // The game samples the mouse once per frame. Pressing in the same frame as the jump from the
+            // previous drag's end point would count that jump as rotation, so let it see the new position first.
+            cameraPressed = NO;
+            NSUInteger thisGesture = ++gestureId;
             AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, (int)origin.x, (int)origin.y, 0, 0);
-            runeLiteMouseButton(BUTTON2_DOWN_MASK, YES);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+                if (thisGesture != gestureId || !camera) return;
+                runeLiteMouseButton(BUTTON2_DOWN_MASK, YES);
+                cameraPressed = YES;
+                [self runeLiteMoveTo:sender];
+            });
         } else {
             [self runeLiteMoveTo:sender];
         }
     }
     if (camera) {
-        [self runeLiteMoveTo:sender];
         if (sender.state >= UIGestureRecognizerStateEnded) {
-            runeLiteMouseButton(BUTTON2_DOWN_MASK, NO);
+            ++gestureId;
+            if (cameraPressed) {
+                [self runeLiteMoveTo:sender];
+                runeLiteMouseButton(BUTTON2_DOWN_MASK, NO);
+            }
+            cameraPressed = NO;
+        } else if (cameraPressed) {
+            [self runeLiteMoveTo:sender];
         }
         return;
     }
