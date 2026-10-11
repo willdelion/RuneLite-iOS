@@ -1,5 +1,6 @@
 #import "authenticator/BaseAuthenticator.h"
 #import "AccountListViewController.h"
+#import "JagexAccount.h"
 #import "AFNetworking.h"
 #import "ALTServerConnection.h"
 #import "LauncherNavigationController.h"
@@ -69,6 +70,11 @@
                                     imageName:@"MenuInstallJar" action:^{
         [contentNavigationController performSelector:@selector(launchRuneLite)];
     }] atIndex:0];
+    [self.options insertObject:(id)[LauncherMenuCustomItem
+                                    title:@"Jagex Account"
+                                    imageName:@"DefaultAccount" action:^{
+        [JagexAccount presentMenuFrom:self sourceView:self.tableView];
+    }] atIndex:1];
     if (realUIIdiom != UIUserInterfaceIdiomTV) {
         [self.options addObject:(id)[LauncherMenuCustomItem
                                      title:localize(@"launcher.menu.custom_controls", nil)
@@ -135,10 +141,10 @@
     
     [self updateAccountInfo];
     
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1 inSection:0];
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:2 inSection:0]; // News; rows 0-1 are RuneLite actions
     [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
     [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
-    self.lastSelectedIndex = 1;
+    self.lastSelectedIndex = 2;
     
     if (getEntitlementValue(@"get-task-allow")) {
         [self displayProgress:localize(@"login.jit.checking", nil)];
