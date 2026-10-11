@@ -26,6 +26,18 @@ public class UIKit {
         System.setProperty("os.name", osName);
     }
 
+    // RuneLite picks macOS-only code paths (Metal, com.apple.eawt, macOS natives) from os.name.
+    // The JDK also derives platform classes from os.name lazily (e.g. jdk.net.LinuxSocketOptions,
+    // missing from the iOS runtime), so initialize those with the real value before switching.
+    private static void patch_RuneLite_setLinux() {
+        try {
+            java.nio.channels.SocketChannel.open().close();
+        } catch (Throwable e) {
+            System.out.println("patch_RuneLite_setLinux: socket preinit failed: " + e);
+        }
+        System.setProperty("os.name", "Linux");
+    }
+
     public static void callback_JavaGUIViewController_launchJarFile(final String filepath, String[] args) throws Throwable {
         // Launch the JAR file
         String mainClassName = null;
@@ -39,6 +51,11 @@ public class UIKit {
 
         // LabyMod Installer uses FlatLAF which has some macOS-specific codes, so we make it think it's running on Linux.
         patch_FlatLAF_setLinux();
+
+        if (filepath.endsWith("/RuneLite.jar")) {
+            patch_RuneLite_setLinux();
+            RuneLiteSupport.start();
+        }
 
         Class<?> clazz = ClassLoader.getSystemClassLoader().loadClass(mainClass);
         Method method = clazz.getMethod("main", String[].class);
