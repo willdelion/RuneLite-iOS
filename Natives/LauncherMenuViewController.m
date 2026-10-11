@@ -64,6 +64,11 @@
         [LauncherMenuCustomItem vcClass:LauncherProfilesViewController.class],
         [LauncherMenuCustomItem vcClass:LauncherPreferencesViewController.class],
     ].mutableCopy;
+    [self.options insertObject:(id)[LauncherMenuCustomItem
+                                    title:@"Play RuneLite"
+                                    imageName:@"MenuInstallJar" action:^{
+        [contentNavigationController performSelector:@selector(launchRuneLite)];
+    }] atIndex:0];
     if (realUIIdiom != UIUserInterfaceIdiomTV) {
         [self.options addObject:(id)[LauncherMenuCustomItem
                                      title:localize(@"launcher.menu.custom_controls", nil)

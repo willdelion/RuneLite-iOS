@@ -258,9 +258,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
     }
 
+    BOOL isRuneLite = launchJar && [[launchTarget lastPathComponent] isEqualToString:@"RuneLite.jar"];
+
     NSString *librariesPath = [NSString stringWithFormat:@"%@/libs", NSBundle.mainBundle.bundlePath];
     margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
-    if(getPrefBool(@"general.cosmetica")) {
+    // Cosmetica's DNS injector is for Minecraft; never route RuneLite's traffic through it
+    if(getPrefBool(@"general.cosmetica") && !isRuneLite) {
         margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
     }
 
@@ -355,6 +358,19 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         }
     }
 
+    // RuneLite: JVM flags from static.runelite.net/bootstrap.json (clientJvm17Arguments).
+    // os.name is switched to Linux later, in UIKit.patch_RuneLite_setLinux
+    if (isRuneLite) {
+        margv[++margc] = "-Xss2m";
+        margv[++margc] = "-XX:CompileThreshold=1500";
+        margv[++margc] = "-Drunelite.launcher.nojvm=true";
+        // Load the JNA dispatch lib signed into the app bundle instead of unpacking an unsigned copy to tmp
+        margv[++margc] = [NSString stringWithFormat:@"-Djna.boot.library.path=%@/Frameworks", NSBundle.mainBundle.bundlePath].UTF8String;
+        margv[++margc] = "-Djna.nounpack=true";
+        margv[++margc] = "--add-opens=java.base/java.io=ALL-UNNAMED";
+        margv[++margc] = "--add-opens=java.desktop/sun.awt=ALL-UNNAMED";
+    }
+
     init_loadCustomJvmFlags(&margc, (const char **)margv);
     NSLog(@"[Init] Found JLI lib");
 
@@ -376,6 +392,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = [launchTarget[@"id"] UTF8String];
     } else {
         margv[++margc] = [launchTarget UTF8String];
+    }
+
+    if (isRuneLite) {
+        // iOS can't spawn a second JVM process, so the launcher must load the client in-process
+        margv[++margc] = "--launch-mode=REFLECT";
+        margv[++margc] = "--hw-accel=OFF";
     }
     //margv[++margc] = "ghidra.GhidraRun";
 

@@ -240,6 +240,30 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self presentViewController:documentPicker animated:YES completion:nil];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    static BOOL autoLaunched;
+    // Env var rather than argv: main() treats argc == 2 as the JIT ptrace child
+    if (!autoLaunched && getenv("AUTO_RUNELITE")) {
+        autoLaunched = YES;
+        [self launchRuneLite];
+    }
+}
+
+- (void)launchRuneLite {
+    // RuneLite.jar is bundled; copy it to a writable dir so the launcher can self-manage alongside ~/.runelite
+    NSString *dir = [NSString stringWithFormat:@"%s/runelite", getenv("AME_HOME")];
+    NSString *jar = [dir stringByAppendingPathComponent:@"RuneLite.jar"];
+    NSString *bundled = [NSBundle.mainBundle pathForResource:@"RuneLite" ofType:@"jar"];
+    [NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    if (bundled && ![NSFileManager.defaultManager contentsEqualAtPath:bundled andPath:jar]) {
+        [NSFileManager.defaultManager removeItemAtPath:jar error:nil];
+        [NSFileManager.defaultManager copyItemAtPath:bundled toPath:jar error:nil];
+    }
+    setenv("GAME_DIR", dir.UTF8String, 1);
+    [self enterModInstallerWithPath:jar hitEnterAfterWindowShown:NO];
+}
+
 - (void)enterModInstallerWithPath:(NSString *)path hitEnterAfterWindowShown:(BOOL)hitEnter {
     JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
     vc.filepath = path;

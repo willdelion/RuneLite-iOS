@@ -14,6 +14,9 @@
 
 static BOOL shouldHitEnterAfterWindowShown;
 static SurfaceView* surfaceView;
+// RuneLite mode: landscape, fixed render scale and desktop-style touch gestures
+static BOOL isRuneLiteMode;
+#define RUNELITE_RENDER_SCALE 1.5
 
 static jclass class_CTCAndroidInput;
 static jmethodID method_ReceiveInput;
@@ -162,6 +165,7 @@ void AWTInputBridge_sendKey(int keycode) {
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
     [super touchesMoved:touches withEvent:event];
+    if (isRuneLiteMode) return;
     UITouch *touchEvent = touches.anyObject;
     CGPoint location = [touchEvent locationInView:self];
     if (self.shouldTriggerClick && !CGRectContainsPoint(self.clickRange, location)) {
@@ -230,9 +234,17 @@ void AWTInputBridge_sendKey(int keycode) {
     [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
     [self setNeedsUpdateOfHomeIndicatorAutoHidden];
     virtualMouseEnabled = getPrefBool(@"control.virtmouse_enable");
+    isRuneLiteMode = [self.filepath.lastPathComponent isEqualToString:@"RuneLite.jar"];
 
     CGRect screenBounds = self.view.bounds;
     CGFloat screenScale = UIScreen.mainScreen.scale * getPrefFloat(@"video.resolution") / 100.0;
+    if (isRuneLiteMode) {
+        // The view may still be portrait here; RuneLite always runs in landscape
+        CGSize size = UIScreen.mainScreen.bounds.size;
+        screenBounds.size = CGSizeMake(MAX(size.width, size.height), MIN(size.width, size.height));
+        screenScale = RUNELITE_RENDER_SCALE;
+        virtualMouseEnabled = NO;
+    }
     windowWidth = roundf(screenBounds.size.width * screenScale);
     windowHeight = roundf(screenBounds.size.height * screenScale);
     // Resolution should not be odd
@@ -278,13 +290,18 @@ void AWTInputBridge_sendKey(int keycode) {
     };
     [self.view addSubview:self.inputTextField];
 
-    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc]
-        initWithTarget:self action:@selector(surfaceOnClick:)];
-    tapGesture.delegate = self;
-    tapGesture.numberOfTapsRequired = 1;
-    tapGesture.numberOfTouchesRequired = 1;
-    tapGesture.cancelsTouchesInView = NO;
-    [surfaceView addGestureRecognizer:tapGesture];
+    if (isRuneLiteMode) {
+        self.surfaceScrollView.maximumZoomScale = 1;
+        [self setupRuneLiteGestures];
+    } else {
+        UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc]
+            initWithTarget:self action:@selector(surfaceOnClick:)];
+        tapGesture.delegate = self;
+        tapGesture.numberOfTapsRequired = 1;
+        tapGesture.numberOfTouchesRequired = 1;
+        tapGesture.cancelsTouchesInView = NO;
+        [surfaceView addGestureRecognizer:tapGesture];
+    }
 
     // Borrowing custom controls, might be useful later (full-blown jar launcher with control support?)
     self.ctrlView = [[ControlLayout alloc] initWithFrame:UIEdgeInsetsInsetRect(self.view.frame, self.view.safeAreaInsets)];
@@ -335,6 +352,15 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         @"${right} - ${margin}", @"${margin}",
         BTN_RECT
     )];
+    if (isRuneLiteMode) {
+        // Mouse buttons are replaced by gestures in RuneLite mode
+        [self.ctrlView loadControlLayout:dict];
+        for (ControlButton *button in self.ctrlView.subviews) {
+            [button addTarget:self action:@selector(executebtn_down:) forControlEvents:UIControlEventTouchDown];
+            [button addTarget:self action:@selector(executebtn_up:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside];
+        }
+        return;
+    }
     [dict[@"mControlDataList"] addObject:createButton(@"Mouse",
         (int[]){SPECIALBTN_VIRTUALMOUSE,0,0,0},
         @"${right} - ${margin}", @"${margin} * 2 + ${height}",
@@ -517,6 +543,133 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.surfaceScrollView.virtualMouseFrame = self.surfaceScrollView.mousePointerView.frame;
     }];
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (!isRuneLiteMode) return;
+    // Views are created before the landscape rotation; the surface has no autoresizing of its own
+    self.surfaceScrollView.frame = self.view.bounds;
+    self.surfaceScrollView.contentSize = self.view.bounds.size;
+    surfaceView.frame = self.view.bounds;
+    CGRect ctrlFrame = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
+    if (!CGRectEqualToRect(self.ctrlView.frame, ctrlFrame)) {
+        self.ctrlView.frame = ctrlFrame;
+        [self.ctrlView.subviews makeObjectsPerformSelector:@selector(update)];
+    }
+}
+
+#pragma mark - RuneLite gestures
+
+- (void)setupRuneLiteGestures {
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(runeLiteTap:)];
+    [surfaceView addGestureRecognizer:tap];
+
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(runeLiteLongPress:)];
+    longPress.minimumPressDuration = 0.35;
+    [surfaceView addGestureRecognizer:longPress];
+
+    UIPanGestureRecognizer *drag = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(runeLiteDrag:)];
+    drag.minimumNumberOfTouches = 1;
+    drag.maximumNumberOfTouches = 1;
+    [surfaceView addGestureRecognizer:drag];
+
+    UIPanGestureRecognizer *camera = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(runeLiteCamera:)];
+    camera.minimumNumberOfTouches = 2;
+    camera.maximumNumberOfTouches = 2;
+    camera.delegate = self;
+    [surfaceView addGestureRecognizer:camera];
+
+    UIPinchGestureRecognizer *pinch = [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(runeLitePinch:)];
+    pinch.delegate = self;
+    [surfaceView addGestureRecognizer:pinch];
+
+    [tap requireGestureRecognizerToFail:longPress];
+}
+
+// Rotating the camera and zooming at the same time is fine
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return isRuneLiteMode && ([gestureRecognizer isKindOfClass:UIPinchGestureRecognizer.class] || [other isKindOfClass:UIPinchGestureRecognizer.class]);
+}
+
+- (void)runeLiteMoveTo:(UIGestureRecognizer *)sender {
+    CGPoint p = [sender locationInView:surfaceView];
+    int x = (int)(p.x * windowWidth / surfaceView.bounds.size.width);
+    int y = (int)(p.y * windowHeight / surfaceView.bounds.size.height);
+    NSDebugLog(@"[RuneLite] %@ state=%ld -> (%d, %d) of %dx%d", NSStringFromClass(sender.class), (long)sender.state, x, y, windowWidth, windowHeight);
+    AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, x, y, 0, 0);
+}
+
+- (void)runeLiteTap:(UITapGestureRecognizer *)sender {
+    if (sender.state != UIGestureRecognizerStateRecognized) return;
+    [self runeLiteMoveTo:sender];
+    AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON1_DOWN_MASK, 1, 0, 0);
+    // The game polls input on its own tick; an instant press+release can be missed
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON1_DOWN_MASK, 0, 0, 0);
+    });
+}
+
+- (void)runeLiteLongPress:(UILongPressGestureRecognizer *)sender {
+    [self runeLiteMoveTo:sender];
+    if (sender.state == UIGestureRecognizerStateBegan) {
+        UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [haptic impactOccurred];
+        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON3_DOWN_MASK, 1, 0, 0);
+    } else if (sender.state >= UIGestureRecognizerStateEnded) {
+        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, BUTTON3_DOWN_MASK, 0, 0, 0);
+    }
+}
+
+- (void)runeLiteDragWithButton:(int)button sender:(UIGestureRecognizer *)sender {
+    [self runeLiteMoveTo:sender];
+    if (sender.state == UIGestureRecognizerStateBegan) {
+        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, button, 1, 0, 0);
+    } else if (sender.state >= UIGestureRecognizerStateEnded) {
+        AWTInputBridge_nativeSendData(EVENT_TYPE_MOUSE_BUTTON, button, 0, 0, 0);
+    }
+}
+
+- (void)runeLiteDrag:(UIPanGestureRecognizer *)sender {
+    [self runeLiteDragWithButton:BUTTON1_DOWN_MASK sender:sender];
+}
+
+// OSRS rotates the camera while the middle mouse button is dragged
+- (void)runeLiteCamera:(UIPanGestureRecognizer *)sender {
+    [self runeLiteDragWithButton:BUTTON2_DOWN_MASK sender:sender];
+}
+
+- (void)runeLitePinch:(UIPinchGestureRecognizer *)sender {
+    static CGFloat lastScale;
+    static jclass cls;
+    static jmethodID wheel;
+    if (sender.state == UIGestureRecognizerStateBegan) {
+        lastScale = 1;
+        [self runeLiteMoveTo:sender];
+    }
+    if (!runtimeJNIEnvPtr) return;
+    if (!wheel) {
+        cls = (*runtimeJNIEnvPtr)->FindClass(runtimeJNIEnvPtr, "net/kdt/pojavlaunch/uikit/RuneLiteSupport");
+        if (!cls) {
+            (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+            return;
+        }
+        cls = (*runtimeJNIEnvPtr)->NewGlobalRef(runtimeJNIEnvPtr, cls);
+        wheel = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "mouseWheel", "(I)V");
+    }
+    // One wheel notch per 12% of pinch; scrolling up (negative) zooms in
+    while (sender.scale > lastScale * 1.12) {
+        lastScale *= 1.12;
+        (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, wheel, -1);
+    }
+    while (sender.scale < lastScale / 1.12) {
+        lastScale /= 1.12;
+        (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, wheel, 1);
+    }
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return isRuneLiteMode ? UIInterfaceOrientationMaskLandscape : UIInterfaceOrientationMaskAll;
 }
 
 - (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {
