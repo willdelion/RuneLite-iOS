@@ -257,6 +257,16 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
 
 #pragma mark - JagexAccount
 
+// The launcher menu that starts sign-in is often dismissed by the time a later step needs to show
+// something (iPhone split view), and presenting from an off-screen controller silently does nothing
+static UIViewController *topPresenter(UIViewController *fallback) {
+    UIViewController *vc = fallback.view.window.rootViewController ?: UIApplication.sharedApplication.windows.firstObject.rootViewController;
+    while (vc.presentedViewController && !vc.presentedViewController.isBeingDismissed) {
+        vc = vc.presentedViewController;
+    }
+    return vc ?: fallback;
+}
+
 @implementation JagexAccount
 
 + (NSDictionary *)keychainQuery {
@@ -313,6 +323,7 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
 
 + (void)applyEnvironment {
     NSDictionary *session = [self current];
+    NSLog(@"[JagexAccount] Launching %@", session[@"characterId"] ? [NSString stringWithFormat:@"with Jagex session for %@", session[@"displayName"] ?: @"<new character>"] : @"without a Jagex session");
     if (session[@"characterId"]) {
         setenv("JX_SESSION_ID", [session[@"sessionId"] UTF8String], 1);
         setenv("JX_CHARACTER_ID", [session[@"characterId"] UTF8String], 1);
@@ -328,6 +339,8 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
 }
 
 + (void)showError:(NSString *)message from:(UIViewController *)vc {
+    NSLog(@"[JagexAccount] Error: %@", message);
+    vc = topPresenter(vc);
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Jagex Account"
         message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
@@ -337,6 +350,7 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
 + (void)presentLoginFrom:(UIViewController *)vc completion:(void (^)(NSDictionary *))completion {
     JagexLoginViewController *login = [JagexLoginViewController new];
     login.completion = ^(NSString *sessionId, NSString *error) {
+        NSLog(@"[JagexAccount] Sign-in finished: %@", sessionId ? @"game session created" : (error ?: @"cancelled"));
         if (!sessionId) {
             if (error) [self showError:error from:vc];
             if (completion) completion(nil);
@@ -346,7 +360,7 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
     };
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:login];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [vc presentViewController:nav animated:YES completion:nil];
+    [topPresenter(vc) presentViewController:nav animated:YES completion:nil];
 }
 
 + (void)chooseCharacterForSession:(NSString *)sessionId from:(UIViewController *)vc sourceView:(UIView *)sourceView completion:(void (^)(NSDictionary *))completion {
@@ -354,6 +368,7 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
     [req setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [req setValue:[@"Bearer " stringByAppendingString:sessionId] forHTTPHeaderField:@"Authorization"];
     sendRequest(req, ^(NSArray *accounts, NSString *error) {
+        NSLog(@"[JagexAccount] Accounts response: %lu character(s)%@", (unsigned long)([accounts isKindOfClass:NSArray.class] ? accounts.count : 0), error ? [@", error: " stringByAppendingString:error] : @"");
         if (![accounts isKindOfClass:NSArray.class] || accounts.count == 0) {
             [self showError:error ?: @"No RuneScape characters found on this Jagex Account." from:vc];
             if (completion) completion(nil);
@@ -365,7 +380,8 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
             if ([account[@"displayName"] isKindOfClass:NSString.class]) {
                 session[@"displayName"] = account[@"displayName"];
             }
-            [self save:session];
+            BOOL saved = [self save:session];
+            NSLog(@"[JagexAccount] Selected character %@ (saved: %@)", session[@"displayName"] ?: @"<new>", saved ? @"YES" : @"NO");
             if (completion) completion(session);
         };
         if (accounts.count == 1) {
@@ -383,9 +399,10 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
         [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *a) {
             if (completion) completion(nil);
         }]];
-        sheet.popoverPresentationController.sourceView = sourceView;
-        sheet.popoverPresentationController.sourceRect = sourceView.bounds;
-        [vc presentViewController:sheet animated:YES completion:nil];
+        UIViewController *presenter = topPresenter(vc);
+        sheet.popoverPresentationController.sourceView = presenter.view;
+        sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds), CGRectGetMidY(presenter.view.bounds), 0, 0);
+        [presenter presentViewController:sheet animated:YES completion:nil];
     });
 }
 
@@ -409,9 +426,10 @@ static void sendRequest(NSURLRequest *request, void (^completion)(id json, NSStr
         [self signOut];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    sheet.popoverPresentationController.sourceView = sourceView;
-    sheet.popoverPresentationController.sourceRect = sourceView.bounds;
-    [vc presentViewController:sheet animated:YES completion:nil];
+    UIViewController *presenter = topPresenter(vc);
+    sheet.popoverPresentationController.sourceView = presenter.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds), CGRectGetMidY(presenter.view.bounds), 0, 0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
 }
 
 @end
