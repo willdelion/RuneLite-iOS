@@ -764,30 +764,31 @@ static BOOL runeLiteIsOverGame(int x, int y) {
 - (void)runeLiteDrag:(UIPanGestureRecognizer *)sender {
     static BOOL camera;
     static CGFloat scrolled;
-    CGPoint p = [self runeLiteBufferPoint:sender];
+    static CGPoint last;
+    CGPoint t = [sender translationInView:surfaceView];
+    CGPoint moved = CGPointMake((int)(t.x * windowWidth / surfaceView.bounds.size.width),
+                                (int)(t.y * windowHeight / surfaceView.bounds.size.height));
     if (sender.state == UIGestureRecognizerStateBegan) {
         // Decide from where the finger went down, not where the pan was recognised
-        CGPoint t = [sender translationInView:surfaceView];
-        CGPoint origin = CGPointMake(p.x - t.x * windowWidth / surfaceView.bounds.size.width,
-                                     p.y - t.y * windowHeight / surfaceView.bounds.size.height);
-        camera = runeLiteIsOverGame((int)origin.x, (int)origin.y);
+        CGPoint p = [self runeLiteBufferPoint:sender];
+        camera = runeLiteIsOverGame((int)(p.x - moved.x), (int)(p.y - moved.y));
         scrolled = 0;
-        if (camera) {
-            AWTInputBridge_nativeSendData(EVENT_TYPE_CURSOR_POS, (int)origin.x, (int)origin.y, 0, 0);
-            runeLiteMouseButton(BUTTON2_DOWN_MASK, YES);
-        } else {
-            [self runeLiteMoveTo:sender];
-        }
+        last = CGPointZero;
+        if (!camera) [self runeLiteMoveTo:sender];
     }
     if (camera) {
-        [self runeLiteMoveTo:sender];
-        if (sender.state >= UIGestureRecognizerStateEnded) {
-            runeLiteMouseButton(BUTTON2_DOWN_MASK, NO);
-        }
+        static jmethodID rotate;
+        jclass cls = runeLiteSupportClass();
+        if (!cls) return;
+        if (!rotate) rotate = (*runtimeJNIEnvPtr)->GetStaticMethodID(runtimeJNIEnvPtr, cls, "rotateCamera", "(II)V");
+        (*runtimeJNIEnvPtr)->CallStaticVoidMethod(runtimeJNIEnvPtr, cls, rotate, (int)(moved.x - last.x), (int)(moved.y - last.y));
+        if ((*runtimeJNIEnvPtr)->ExceptionCheck(runtimeJNIEnvPtr)) (*runtimeJNIEnvPtr)->ExceptionClear(runtimeJNIEnvPtr);
+        last = moved;
         return;
     }
     // Natural scrolling: content follows the finger, one wheel notch per ~16pt
-    CGFloat dy = [sender translationInView:surfaceView].y;
+    CGPoint p = [self runeLiteBufferPoint:sender];
+    CGFloat dy = t.y;
     const CGFloat notch = 16;
     while (dy - scrolled <= -notch) { scrolled -= notch; runeLiteWheel(p, 1); }
     while (dy - scrolled >= notch) { scrolled += notch; runeLiteWheel(p, -1); }

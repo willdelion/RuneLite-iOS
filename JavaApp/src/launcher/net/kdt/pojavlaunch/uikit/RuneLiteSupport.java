@@ -166,6 +166,8 @@ public class RuneLiteSupport {
                 return;
             }
 
+            initClient(loader, injector);
+
             Class<?> configManagerClass = loader.loadClass("net.runelite.client.config.ConfigManager");
             // Call through the public Injector interface; the implementation class isn't accessible
             Object configManager = loader.loadClass("com.google.inject.Injector")
@@ -367,6 +369,71 @@ public class RuneLiteSupport {
             } else if (c instanceof Container) {
                 findNearestButton(frame, (Container) c, p, minX, best, bestDistance);
             }
+        }
+    }
+
+    // net.runelite.api.Client and the methods we drive directly
+    private static volatile Object client;
+    private static Method getYawTarget, setYawTarget, getPitchTarget, setPitchTarget, getFps;
+
+    private static void initClient(ClassLoader loader, Object injector) throws Exception {
+        Class<?> clientClass = loader.loadClass("net.runelite.api.Client");
+        Object c = loader.loadClass("com.google.inject.Injector").getMethod("getInstance", Class.class).invoke(injector, clientClass);
+        getYawTarget = clientClass.getMethod("getCameraYawTarget");
+        setYawTarget = clientClass.getMethod("setCameraYawTarget", int.class);
+        getPitchTarget = clientClass.getMethod("getCameraPitchTarget");
+        setPitchTarget = clientClass.getMethod("setCameraPitchTarget", int.class);
+        getFps = clientClass.getMethod("getFPS");
+        final Method setUnlockedFps = clientClass.getMethod("setUnlockedFps", boolean.class);
+        final Method setUnlockedFpsTarget = clientClass.getMethod("setUnlockedFpsTarget", int.class);
+        client = c;
+
+        // Render between game ticks instead of the default 50 fps cap
+        Thread fps = new Thread(() -> {
+            while (true) {
+                try {
+                    setUnlockedFps.invoke(client, true);
+                    setUnlockedFpsTarget.invoke(client, TARGET_FPS);
+                    System.out.println("RuneLiteSupport: fps " + getFps.invoke(client));
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    return;
+                } catch (Throwable e) {
+                    System.out.println("RuneLiteSupport: fps setup failed: " + e);
+                    return;
+                }
+            }
+        }, "RuneLite-iOS-Fps");
+        fps.setDaemon(true);
+        fps.start();
+    }
+
+    private static final int TARGET_FPS = 60;
+    // Camera units: yaw is 0-2047 for a full turn, pitch is clamped to the game's normal range
+    private static final double YAW_PER_PIXEL = 2.0;
+    private static final double PITCH_PER_PIXEL = 1.0;
+    private static final int PITCH_MIN = 128, PITCH_MAX = 383;
+    private static double yawRemainder, pitchRemainder;
+
+    /**
+     * Rotate the camera by a finger drag of (dx, dy) screen pixels, like OSRS mobile: the world follows the finger.
+     * Setting the camera targets directly avoids emulating a middle-button drag, which Caciocavallo mangles.
+     */
+    public static void rotateCamera(int dx, int dy) {
+        Object c = client;
+        if (c == null) return;
+        try {
+            yawRemainder += dx * YAW_PER_PIXEL;
+            pitchRemainder += dy * PITCH_PER_PIXEL;
+            int yawStep = (int) yawRemainder, pitchStep = (int) pitchRemainder;
+            yawRemainder -= yawStep;
+            pitchRemainder -= pitchStep;
+            int yaw = ((int) getYawTarget.invoke(c) + yawStep) & 2047;
+            int pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, (int) getPitchTarget.invoke(c) + pitchStep));
+            setYawTarget.invoke(c, yaw);
+            setPitchTarget.invoke(c, pitch);
+        } catch (Throwable e) {
+            System.out.println("RuneLiteSupport: rotateCamera failed: " + e);
         }
     }
 
