@@ -8,40 +8,45 @@ import java.lang.reflect.Method;
  * Called from UIKit.java (startup) and from native code via JNI (input).
  */
 public class RuneLiteSupport {
-    private static Object robotPeer;
-    private static Method mouseWheel;
+
+    // Mouse button (1-3) native code is currently pressing; see MouseButtonFixQueue
+    private static volatile int activeButton = java.awt.event.MouseEvent.BUTTON1;
+
+    /** Called from native code right before it presses a mouse button. */
+    public static void setActiveButton(int button) {
+        activeButton = button;
+    }
 
     /**
-     * Caciocavallo occasionally posts MOUSE_PRESSED/RELEASED events with no button. AWT's LightweightDispatcher
-     * throws on those ("button doesn't exist 0"), leaving Swing's mouse grab in a broken state, so infer the
-     * button instead: from the held-button modifiers on press, or the last pressed button on release.
+     * Caciocavallo's robot only converts button masks correctly for the left button: a middle press arrives as
+     * button 1 + Alt Graph, and some presses arrive with no button at all (AWT then throws "button doesn't
+     * exist 0" and Swing's mouse grab breaks). Rewrite button events to the button native code actually pressed.
      */
     private static class MouseButtonFixQueue extends EventQueue {
-        private int lastButton = java.awt.event.MouseEvent.BUTTON1;
+        private static final int BUTTON_DOWN_MASKS = java.awt.event.InputEvent.BUTTON1_DOWN_MASK
+            | java.awt.event.InputEvent.BUTTON2_DOWN_MASK | java.awt.event.InputEvent.BUTTON3_DOWN_MASK
+            | java.awt.event.InputEvent.ALT_GRAPH_DOWN_MASK;
 
         @Override
         protected void dispatchEvent(AWTEvent event) {
-            if (event instanceof java.awt.event.MouseEvent) {
+            if (event instanceof java.awt.event.MouseEvent && !(event instanceof java.awt.event.MouseWheelEvent)) {
                 java.awt.event.MouseEvent e = (java.awt.event.MouseEvent) event;
                 int id = e.getID();
-                boolean buttonEvent = id == java.awt.event.MouseEvent.MOUSE_PRESSED
-                    || id == java.awt.event.MouseEvent.MOUSE_RELEASED
-                    || id == java.awt.event.MouseEvent.MOUSE_CLICKED;
-                if (buttonEvent && e.getButton() == java.awt.event.MouseEvent.NOBUTTON) {
-                    int button = id == java.awt.event.MouseEvent.MOUSE_PRESSED ? buttonFromModifiers(e.getModifiersEx()) : lastButton;
-                    event = new java.awt.event.MouseEvent(e.getComponent(), id, e.getWhen(), e.getModifiersEx(),
-                        e.getX(), e.getY(), e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(), e.isPopupTrigger(), button);
-                } else if (id == java.awt.event.MouseEvent.MOUSE_PRESSED) {
-                    lastButton = e.getButton();
+                boolean held = id == java.awt.event.MouseEvent.MOUSE_PRESSED || id == java.awt.event.MouseEvent.MOUSE_DRAGGED;
+                boolean buttonEvent = held || id == java.awt.event.MouseEvent.MOUSE_RELEASED || id == java.awt.event.MouseEvent.MOUSE_CLICKED;
+                if (buttonEvent) {
+                    int button = activeButton;
+                    int modifiers = e.getModifiersEx() & ~BUTTON_DOWN_MASKS;
+                    // Its right-button mask conversion also leaks a bogus Shift (old BUTTON3 bits)
+                    if (button == java.awt.event.MouseEvent.BUTTON3) modifiers &= ~java.awt.event.InputEvent.SHIFT_DOWN_MASK;
+                    if (held) modifiers |= java.awt.event.InputEvent.getMaskForButton(button);
+                    event = new java.awt.event.MouseEvent(e.getComponent(), id, e.getWhen(), modifiers,
+                        e.getX(), e.getY(), e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(),
+                        id == java.awt.event.MouseEvent.MOUSE_PRESSED && button == java.awt.event.MouseEvent.BUTTON3,
+                        id == java.awt.event.MouseEvent.MOUSE_DRAGGED ? java.awt.event.MouseEvent.NOBUTTON : button);
                 }
             }
             super.dispatchEvent(event);
-        }
-
-        private int buttonFromModifiers(int modifiersEx) {
-            if ((modifiersEx & java.awt.event.InputEvent.BUTTON3_DOWN_MASK) != 0) return java.awt.event.MouseEvent.BUTTON3;
-            if ((modifiersEx & java.awt.event.InputEvent.BUTTON2_DOWN_MASK) != 0) return java.awt.event.MouseEvent.BUTTON2;
-            return java.awt.event.MouseEvent.BUTTON1;
         }
     }
 
@@ -62,20 +67,37 @@ public class RuneLiteSupport {
                     java.awt.event.MouseEvent me = (java.awt.event.MouseEvent) e;
                     System.out.println("RuneLiteSupport: " + me.paramString() + " on " + me.getComponent().getClass().getName()
                         + " screen=" + me.getXOnScreen() + "," + me.getYOnScreen());
+                    for (Window w : Window.getWindows()) {
+                        String title = w instanceof Dialog ? ((Dialog) w).getTitle() : w instanceof Frame ? ((Frame) w).getTitle() : "";
+                        System.out.println("RuneLiteSupport:   window " + w.getClass().getName() + " '" + title + "' visible=" + w.isVisible()
+                            + " showing=" + w.isShowing() + " " + w.getBounds());
+                        if (w instanceof javax.swing.JDialog && w.isShowing()) {
+                            dumpText(((javax.swing.JDialog) w).getContentPane());
+                        }
+                    }
                     for (Component c = me.getComponent(); c != null; c = c.getParent()) {
                         System.out.println("RuneLiteSupport:   " + c.getClass().getName() + " " + c.getBounds());
                     }
                 }
-            }, AWTEvent.MOUSE_EVENT_MASK);
+                if (e instanceof java.awt.event.MouseWheelEvent) {
+                    java.awt.event.MouseWheelEvent we = (java.awt.event.MouseWheelEvent) e;
+                    System.out.println("RuneLiteSupport: wheel " + we.getWheelRotation() + " on " + we.getComponent().getClass().getName());
+                }
+            }, AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_WHEEL_EVENT_MASK);
         }
     }
 
     // There is no window manager on iOS: keep every visible top-level frame covering the whole screen.
     private static void fitFramesLoop() {
+        int tick = 0;
         while (true) {
             try {
                 Thread.sleep(500);
+                if (++tick % 2 == 0) {
+                    EventQueue.invokeLater(RuneLiteSupport::repaintSwingAroundGame);
+                }
                 final Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+                raiseNewDialogs();
                 for (final Frame frame : Frame.getFrames()) {
                     if (!frame.isVisible()) {
                         continue;
@@ -96,6 +118,7 @@ public class RuneLiteSupport {
                             EventQueue.invokeLater(() -> {
                                 frame.invalidate();
                                 frame.validate();
+                                frame.repaint();
                             });
                         }
                     }
@@ -211,6 +234,76 @@ public class RuneLiteSupport {
         }
     }
 
+    private static final java.util.Map<Window, Boolean> raisedDialogs = new java.util.WeakHashMap<>();
+
+    /**
+     * Caciocavallo can leave a newly shown dialog (e.g. a modal message box) stacked under the main frame:
+     * invisible, yet modal and swallowing touches. Bring each new dialog to the front once.
+     */
+    private static void raiseNewDialogs() {
+        for (final Window w : Window.getWindows()) {
+            if (w instanceof Dialog && w.isShowing() && !raisedDialogs.containsKey(w)) {
+                raisedDialogs.put(w, Boolean.TRUE);
+                EventQueue.invokeLater(() -> {
+                    w.toFront();
+                    w.repaint();
+                });
+            }
+        }
+    }
+
+    /**
+     * Caciocavallo misses some Swing repaints (e.g. RuneLite's sidebar icons after a layout change stay blank
+     * until touched). Periodically repaint the Swing parts of the window, skipping the game canvas, which
+     * draws itself every frame.
+     */
+    private static void repaintSwingAroundGame() {
+        for (Frame frame : Frame.getFrames()) {
+            if (frame.isShowing()) {
+                repaintExceptCanvas(frame);
+            }
+        }
+    }
+
+    private static boolean repaintExceptCanvas(Container parent) {
+        boolean containsCanvas = false;
+        for (Component c : parent.getComponents()) {
+            if (!c.isShowing()) continue;
+            if (c instanceof Canvas) {
+                containsCanvas = true;
+            } else if (c instanceof Container && repaintExceptCanvas((Container) c)) {
+                containsCanvas = true;
+            } else {
+                c.repaint();
+            }
+        }
+        return containsCanvas;
+    }
+
+    private static void dumpText(Container parent) {
+        for (Component c : parent.getComponents()) {
+            if (c instanceof javax.swing.JLabel) System.out.println("RuneLiteSupport:     label: " + ((javax.swing.JLabel) c).getText());
+            if (c instanceof javax.swing.text.JTextComponent) System.out.println("RuneLiteSupport:     text: " + ((javax.swing.text.JTextComponent) c).getText());
+            if (c instanceof javax.swing.AbstractButton) System.out.println("RuneLiteSupport:     button: " + ((javax.swing.AbstractButton) c).getText());
+            if (c instanceof Container) dumpText((Container) c);
+        }
+    }
+
+    /** True when the screen point is over the game itself rather than RuneLite's Swing UI. */
+    public static boolean isOverGame(int x, int y) {
+        try {
+            for (Frame frame : Frame.getFrames()) {
+                if (!frame.isShowing()) continue;
+                Point origin = frame.getLocationOnScreen();
+                Component hit = javax.swing.SwingUtilities.getDeepestComponentAt(frame, x - origin.x, y - origin.y);
+                return hit instanceof Canvas;
+            }
+        } catch (Throwable e) {
+            System.out.println("RuneLiteSupport: isOverGame failed: " + e);
+        }
+        return true;
+    }
+
     // Max distance (in screen pixels) a tap may miss a Swing button by and still hit it
     private static final int SNAP_RADIUS = 28;
     // Width of the strip along the game canvas' right edge that may snap to the sidebar
@@ -277,15 +370,24 @@ public class RuneLiteSupport {
         }
     }
 
-    /** Positive amount scrolls down (zooms the camera out in OSRS). */
-    public static void mouseWheel(int amount) {
+    /**
+     * Positive amount scrolls down (zooms the camera out in OSRS). Caciocavallo's robot ignores the wheel, so
+     * post the event to whatever is under the given screen point; Swing forwards it to enclosing scroll panes.
+     */
+    public static void mouseWheel(int x, int y, int amount) {
         try {
-            if (mouseWheel == null) {
-                Class<?> input = Class.forName("com.github.caciocavallosilano.cacio.ctc.CTCAndroidInput");
-                robotPeer = input.getField("mRobotPeer").get(null);
-                mouseWheel = robotPeer.getClass().getMethod("mouseWheel", int.class);
+            for (Frame frame : Frame.getFrames()) {
+                if (!frame.isShowing()) continue;
+                Point origin = frame.getLocationOnScreen();
+                Component target = javax.swing.SwingUtilities.getDeepestComponentAt(frame, x - origin.x, y - origin.y);
+                if (target == null) return;
+                Point local = new Point(x, y);
+                javax.swing.SwingUtilities.convertPointFromScreen(local, target);
+                Toolkit.getDefaultToolkit().getSystemEventQueue().postEvent(new java.awt.event.MouseWheelEvent(
+                    target, java.awt.event.MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0,
+                    local.x, local.y, x, y, 0, false, java.awt.event.MouseWheelEvent.WHEEL_UNIT_SCROLL, 3, amount));
+                return;
             }
-            mouseWheel.invoke(robotPeer, amount);
         } catch (Throwable e) {
             System.out.println("RuneLiteSupport: mouseWheel failed: " + e);
         }

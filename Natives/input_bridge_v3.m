@@ -82,8 +82,8 @@ jint
 hooked_ProcessImpl_forkAndExec(JNIEnv *env, jobject process, jint mode, jbyteArray helperpath, jbyteArray prog, jbyteArray argBlock, jint argc, jbyteArray envBlock, jint envc, jbyteArray dir, jintArray std_fds, jboolean redirectErrorStream) {
     char *pProg = (char *)((*env)->GetByteArrayElements(env, prog, NULL));
 
-    // Here we only handle the "open" command
-    if (strcmp(basename(pProg), "open")) {
+    // Here we only handle the "open" command (and "xdg-open", which RuneLite uses since it runs as Linux)
+    if (strcmp(basename(pProg), "open") && strcmp(basename(pProg), "xdg-open")) {
         (*env)->ReleaseByteArrayElements(env, prog, (jbyte *)pProg, 0);
         return orig_ProcessImpl_forkAndExec(env, process, mode, helperpath, prog, argBlock, argc, envBlock, envc, dir, std_fds, redirectErrorStream);
     }
