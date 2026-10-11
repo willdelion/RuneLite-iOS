@@ -132,11 +132,13 @@ public class RuneLiteSupport {
     }
 
     // Phone-friendly defaults, applied once per RuneLite profile so the player can change them afterwards
-    private static final String DEFAULTS_VERSION = "4";
+    private static final String DEFAULTS_VERSION = "5";
     private static final String[][] DEFAULT_CONFIG = {
         // Fill the whole wide phone screen; fixed mode gets stretched horizontally
         {"stretchedmode", "keepAspectRatio", "false"},
         {"stretchedmode", "increasedPerformance", "true"},
+        // Plugin Hub plugins load after this runs; their enabled flag is read from config when they do
+        {"runelite", "camerasmoothingplugin", "false"},
         // No window title bar on a phone screen (takes effect on the next launch)
         {"runelite", "uiEnableCustomChrome", "false"},
     };
@@ -146,6 +148,8 @@ public class RuneLiteSupport {
         {"StretchedModePlugin", "true"},
         // The GPU plugin needs desktop OpenGL, which doesn't exist here
         {"GpuPlugin", "false"},
+        // Rewrites camera targets every frame, fighting the touch camera control (see rotateCamera)
+        {"CameraSmoothingPlugin", "false"},
     };
 
     private static void applyDefaultConfig() {
@@ -410,8 +414,9 @@ public class RuneLiteSupport {
 
     private static final int TARGET_FPS = 60;
     // Camera units: yaw is 0-2047 for a full turn, pitch is clamped to the game's normal range
-    private static final double YAW_PER_PIXEL = 2.0;
-    private static final double PITCH_PER_PIXEL = 1.0;
+    // A drag across the whole screen turns the camera about half way round
+    private static final double YAW_PER_PIXEL = 0.8;
+    private static final double PITCH_PER_PIXEL = 0.6;
     private static final int PITCH_MIN = 128, PITCH_MAX = 383;
     private static double yawRemainder, pitchRemainder;
 
