@@ -1,7 +1,6 @@
 #import "JagexAccount.h"
 #import "JavaGUIViewController.h"
 #import "LauncherPreferences.h"
-#import "LauncherPreferencesViewController.h"
 #import "RuneLiteLauncherViewController.h"
 #import "utils.h"
 
@@ -20,6 +19,103 @@
 @property(nonatomic) UIActivityIndicatorView *spinner;
 @property(nonatomic) UILabel *statusLabel;
 @property(nonatomic) BOOL launching;
+@end
+
+// Only the settings that matter for RuneLite: how much memory Java may use
+@interface RuneLiteSettingsViewController : UITableViewController
+@property(nonatomic) UISlider *memorySlider;
+@property(nonatomic) UILabel *memoryLabel;
+@end
+
+@implementation RuneLiteSettingsViewController
+
+static NSInteger autoMemoryMB(void) {
+    // Same ratio JavaLauncher uses for java.auto_ram
+    CGFloat ratio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
+    return roundf((NSProcessInfo.processInfo.physicalMemory >> 20) * ratio);
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Настройки";
+
+    self.memoryLabel = [[UILabel alloc] init];
+    self.memoryLabel.font = [UIFont monospacedDigitSystemFontOfSize:17 weight:UIFontWeightRegular];
+    self.memoryLabel.textColor = UIColor.secondaryLabelColor;
+    self.memorySlider = [[UISlider alloc] init];
+    self.memorySlider.minimumValue = 512;
+    self.memorySlider.maximumValue = (NSProcessInfo.processInfo.physicalMemory >> 20) * 0.6;
+    self.memorySlider.tintColor = RL_ORANGE;
+    [self.memorySlider addTarget:self action:@selector(memoryChanged) forControlEvents:UIControlEventValueChanged];
+    [self updateMemory];
+}
+
+- (void)updateMemory {
+    BOOL automatic = getPrefBool(@"java.auto_ram");
+    NSInteger mb = automatic ? autoMemoryMB() : getPrefInt(@"java.allocated_memory");
+    self.memorySlider.value = mb;
+    self.memorySlider.enabled = !automatic;
+    self.memoryLabel.text = [NSString stringWithFormat:@"%ld МБ", (long)mb];
+}
+
+- (void)memoryChanged {
+    NSInteger mb = lroundf(self.memorySlider.value / 64) * 64;
+    setPrefInt(@"java.allocated_memory", mb);
+    self.memoryLabel.text = [NSString stringWithFormat:@"%ld МБ", (long)mb];
+}
+
+- (void)autoChanged:(UISwitch *)sender {
+    setPrefBool(@"java.auto_ram", sender.on);
+    if (!sender.on && getPrefInt(@"java.allocated_memory") < self.memorySlider.minimumValue) {
+        setPrefInt(@"java.allocated_memory", autoMemoryMB());
+    }
+    [self updateMemory];
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return 2;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return @"Память для RuneLite";
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    return @"Больше памяти — меньше подвисаний, но iOS может закрыть игру, если выделить слишком много. Изменения применяются при следующем запуске.";
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    if (indexPath.row == 0) {
+        cell.textLabel.text = @"Автоматически";
+        UISwitch *toggle = [[UISwitch alloc] init];
+        toggle.onTintColor = RL_ORANGE;
+        toggle.on = getPrefBool(@"java.auto_ram");
+        [toggle addTarget:self action:@selector(autoChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = toggle;
+    } else {
+        UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[self.memorySlider, self.memoryLabel]];
+        row.spacing = 12;
+        row.alignment = UIStackViewAlignmentCenter;
+        row.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.memoryLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [cell.contentView addSubview:row];
+        UILayoutGuide *margins = cell.contentView.layoutMarginsGuide;
+        [NSLayoutConstraint activateConstraints:@[
+            [row.leadingAnchor constraintEqualToAnchor:margins.leadingAnchor],
+            [row.trailingAnchor constraintEqualToAnchor:margins.trailingAnchor],
+            [row.topAnchor constraintEqualToAnchor:margins.topAnchor],
+            [row.bottomAnchor constraintEqualToAnchor:margins.bottomAnchor],
+        ]];
+    }
+    return cell;
+}
+
 @end
 
 @implementation RuneLiteLauncherViewController
@@ -280,9 +376,9 @@
 }
 
 - (void)openSettings {
-    LauncherPreferencesViewController *prefs = [[LauncherPreferencesViewController alloc] init];
+    RuneLiteSettingsViewController *prefs = [[RuneLiteSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
     prefs.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismissPresented)];
+        initWithTitle:@"Готово" style:UIBarButtonItemStyleDone target:self action:@selector(dismissPresented)];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:prefs];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     nav.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
@@ -351,7 +447,7 @@
         [UIApplication.sharedApplication openURL:[NSURL URLWithString:[NSString stringWithFormat:@"sidestore://sidejit-enable?pid=%d", getpid()]] options:@{} completionHandler:nil];
     }
 
-    [self setLaunching:YES status:@"Ожидание JIT… Если StikDebug не вернул вас сюда, откройте RuneLite снова. Нажмите «Играть» ещё раз, чтобы отменить."];
+    [self setLaunching:YES status:@"Ожидание JIT от StikDebug — игра запустится сама"];
     // While waiting, Play cancels the wait instead of launching
     self.playButton.enabled = YES;
     [self.playButton setTitle:@"Отмена" forState:UIControlStateNormal];
