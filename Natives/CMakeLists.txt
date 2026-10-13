@@ -156,6 +156,7 @@ add_executable(AngelAuraAmethyst
   LauncherProfileEditorViewController.m
   LauncherProfilesViewController.m
   LauncherSplitViewController.m
+  RuneLiteLauncherViewController.m
   MinecraftOptionUtils.m
   MinecraftResourceDownloadTask.m
   MinecraftResourceUtils.m

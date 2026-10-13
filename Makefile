@@ -343,6 +343,7 @@ payload: native dep_mg java jre assets
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17 || exit 1
 	cp $(SOURCEDIR)/RuneLite/RuneLite.jar $(WORKINGDIR)/AngelAuraAmethyst.app/RuneLite.jar || exit 1
+	cp $(SOURCEDIR)/RuneLite/runelite_128.png $(WORKINGDIR)/AngelAuraAmethyst.app/RuneLiteIcon.png || exit 1
 	cp $(SOURCEDIR)/RuneLite/libjnidispatch.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libjnidispatch.dylib || exit 1
 	$(call METHOD_DIRCHECK,$(OUTPUTDIR)/Payload)
 	cp -R $(WORKINGDIR)/AngelAuraAmethyst.app $(OUTPUTDIR)/Payload

@@ -54,7 +54,9 @@
 
     // Put navigation buttons back in place if we're first of the navigation controller
     if (self.hasDetail && self.navigationController) {
-        self.navigationItem.rightBarButtonItems = @[[sidebarViewController drawAccountButton], [self drawHelpButton]];
+        // No sidebar (and so no account button) when opened from the RuneLite launcher
+        UIBarButtonItem *accountButton = [sidebarViewController drawAccountButton];
+        self.navigationItem.rightBarButtonItems = accountButton ? @[accountButton, [self drawHelpButton]] : @[[self drawHelpButton]];
     }
 
     // Scan for child pane cells and reload them

@@ -66,9 +66,14 @@
         [LauncherMenuCustomItem vcClass:LauncherPreferencesViewController.class],
     ].mutableCopy;
     [self.options insertObject:(id)[LauncherMenuCustomItem
-                                    title:@"Play RuneLite"
-                                    imageName:@"MenuInstallJar" action:^{
-        [contentNavigationController performSelector:@selector(launchRuneLite)];
+                                    title:@"RuneLite"
+                                    imageName:@"chevron.backward" action:^{
+        // This launcher is opened from the RuneLite home screen; go back to it
+        if (self.splitViewController.presentingViewController) {
+            [self.splitViewController dismissViewControllerAnimated:YES completion:nil];
+        } else {
+            [contentNavigationController performSelector:@selector(launchRuneLite)];
+        }
     }] atIndex:0];
     [self.options insertObject:(id)[LauncherMenuCustomItem
                                     title:@"Jagex Account"
