@@ -241,16 +241,6 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self presentViewController:documentPicker animated:YES completion:nil];
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    static BOOL autoLaunched;
-    // Env var rather than argv: main() treats argc == 2 as the JIT ptrace child
-    if (!autoLaunched && getenv("AUTO_RUNELITE")) {
-        autoLaunched = YES;
-        [self launchRuneLite];
-    }
-}
-
 - (void)launchRuneLite {
     // RuneLite.jar is bundled; copy it to a writable dir so the launcher can self-manage alongside ~/.runelite
     NSString *dir = [NSString stringWithFormat:@"%s/runelite", getenv("AME_HOME")];

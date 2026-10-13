@@ -10,6 +10,8 @@ static NSString *const kLauncherRedirect = @"https://secure.runescape.com/m=webl
 static NSString *const kConsentClientId = @"1fddee4e-b100-4f4e-b2b0-097f9088f9d2";
 static NSString *const kGameSessionAPI = @"https://auth.jagex.com/game-session/v1";
 
+NSNotificationName const JagexAccountDidChangeNotification = @"JagexAccountDidChange";
+
 static NSString *const kKeychainService = @"runelite.jagex-account";
 
 #pragma mark - Helpers
@@ -310,6 +312,9 @@ static UIViewController *topPresenter(UIViewController *fallback) {
 }
 
 + (BOOL)save:(NSDictionary *)session {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [NSNotificationCenter.defaultCenter postNotificationName:JagexAccountDidChangeNotification object:nil];
+    });
     SecItemDelete((__bridge CFDictionaryRef)[self keychainQuery]);
     NSMutableDictionary *item = [self keychainQuery].mutableCopy;
     item[(__bridge id)kSecValueData] = [NSJSONSerialization dataWithJSONObject:session options:0 error:nil];
@@ -329,6 +334,7 @@ static UIViewController *topPresenter(UIViewController *fallback) {
 + (void)signOut {
     SecItemDelete((__bridge CFDictionaryRef)[self keychainQuery]);
     [NSFileManager.defaultManager removeItemAtPath:[self fallbackPath] error:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:JagexAccountDidChangeNotification object:nil];
 }
 
 + (void)applyEnvironment {

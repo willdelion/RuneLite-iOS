@@ -4,6 +4,7 @@
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
 #import "LauncherSplitViewController.h"
+#import "RuneLiteLauncherViewController.h"
 #import "PLLogOutputView.h"
 #import "SurfaceViewController.h"
 
@@ -131,7 +132,8 @@ void UIKit_returnToSplitView() {
         UIWindow *window = UIWindow.mainWindow;
 
         // Return from JavaGUIViewController
-        if ([window.rootViewController isKindOfClass:LauncherSplitViewController.class]) {
+        if ([window.rootViewController isKindOfClass:LauncherSplitViewController.class] ||
+            [window.rootViewController isKindOfClass:RuneLiteLauncherViewController.class]) {
             [currentVC() dismissViewControllerAnimated:YES completion:nil];
             return;
         }
@@ -146,7 +148,7 @@ void UIKit_returnToSplitView() {
                 window.rootViewController = tmpRootVC;
                 tmpRootVC = nil;
             } else {
-                window.rootViewController = [[LauncherSplitViewController alloc] initWithStyle:UISplitViewControllerStyleDoubleColumn];
+                window.rootViewController = [[RuneLiteLauncherViewController alloc] init];
             }
             [window makeKeyAndVisible];
         }];
@@ -154,12 +156,12 @@ void UIKit_returnToSplitView() {
 }
 
 void launchInitialViewController(UIWindow *window) {
-    window.rootViewController = [[LauncherSplitViewController alloc] initWithStyle:UISplitViewControllerStyleDoubleColumn];
+    window.rootViewController = [[RuneLiteLauncherViewController alloc] init];
 #if 0
     if (getPrefBool(@"internal.internal_launch_on_boot")) {
         window.rootViewController = [[SurfaceViewController alloc] init];
     } else {
-        window.rootViewController = [[LauncherSplitViewController alloc] initWithStyle:UISplitViewControllerStyleDoubleColumn];
+        window.rootViewController = [[RuneLiteLauncherViewController alloc] init];
     }
 #endif
 }

@@ -3,6 +3,9 @@
 // Jagex Account sign-in for RuneLite, following the Jagex Launcher's OAuth flow
 // (same flow as the open-source Bolt launcher). The resulting game session is handed
 // to RuneLite through the JX_* environment variables, like the Jagex Launcher does.
+// Posted on the main queue after sign-in, character switch or sign-out
+extern NSNotificationName const JagexAccountDidChangeNotification;
+
 @interface JagexAccount : NSObject
 
 // Saved session: @{sessionId, characterId, displayName}, or nil when signed out
