@@ -2,7 +2,6 @@
 #import "JavaGUIViewController.h"
 #import "LauncherPreferences.h"
 #import "LauncherPreferencesViewController.h"
-#import "LauncherSplitViewController.h"
 #import "RuneLiteLauncherViewController.h"
 #import "utils.h"
 
@@ -100,15 +99,7 @@
     [stack addArrangedSubview:self.statusLabel];
     [stack setCustomSpacing:24 afterView:self.statusLabel];
 
-    // Secondary actions
-    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[
-        [self makeSecondaryButton:@"Настройки" image:@"gearshape" action:@selector(openSettings)],
-        [self makeSecondaryButton:@"Amethyst" image:@"slider.horizontal.3" action:@selector(openAdvanced)],
-    ]];
-    row.axis = UILayoutConstraintAxisHorizontal;
-    row.distribution = UIStackViewDistributionFillEqually;
-    row.spacing = 12;
-    [stack addArrangedSubview:row];
+    [stack addArrangedSubview:[self makeSecondaryButton:@"Настройки" image:@"gearshape" action:@selector(openSettings)]];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     NSLayoutConstraint *preferredWidth = [stack.widthAnchor constraintEqualToAnchor:safe.widthAnchor constant:-40];
@@ -296,12 +287,6 @@
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     nav.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self presentViewController:nav animated:YES completion:nil];
-}
-
-- (void)openAdvanced {
-    LauncherSplitViewController *split = [[LauncherSplitViewController alloc] initWithStyle:UISplitViewControllerStyleDoubleColumn];
-    split.modalPresentationStyle = UIModalPresentationFullScreen;
-    [self presentViewController:split animated:YES completion:nil];
 }
 
 - (void)dismissPresented {
