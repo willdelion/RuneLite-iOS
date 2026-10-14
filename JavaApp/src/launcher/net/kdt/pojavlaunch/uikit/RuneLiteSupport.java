@@ -177,6 +177,7 @@ public class RuneLiteSupport {
             }
 
             initClient(loader, injector);
+            retryPluginHub(loader, injector);
 
             Class<?> configManagerClass = loader.loadClass("net.runelite.client.config.ConfigManager");
             // Call through the public Injector interface; the implementation class isn't accessible
@@ -415,6 +416,49 @@ public class RuneLiteSupport {
     }
 
     private static final int TARGET_FPS = 60;
+
+    /**
+     * RuneLite fetches the Plugin Hub manifest once at startup and loads no hub plugins if that request fails
+     * (e.g. a SocketTimeoutException while the phone's network/VPN is still settling). Keep retrying in the
+     * background until the installed hub plugins are actually running.
+     */
+    private static void retryPluginHub(ClassLoader loader, Object injector) throws Exception {
+        Class<?> managerClass = loader.loadClass("net.runelite.client.externalplugins.ExternalPluginManager");
+        Class<?> pluginManagerClass = loader.loadClass("net.runelite.client.plugins.PluginManager");
+        Method getInstance = loader.loadClass("com.google.inject.Injector").getMethod("getInstance", Class.class);
+        final Object externalManager = getInstance.invoke(injector, managerClass);
+        final Object pluginManager = getInstance.invoke(injector, pluginManagerClass);
+        final Method installed = managerClass.getMethod("getInstalledExternalPlugins");
+        final Method update = managerClass.getMethod("update");
+        final Method getJarData = managerClass.getMethod("getJarData", Class.class);
+        final Method getPlugins = pluginManagerClass.getMethod("getPlugins");
+
+        Thread retry = new Thread(() -> {
+            // Give the normal startup load time to finish first
+            for (int attempt = 0; attempt < 10; attempt++) {
+                try {
+                    Thread.sleep(attempt == 0 ? 45000 : 30000);
+                    if (((java.util.List<?>) installed.invoke(externalManager)).isEmpty()) return;
+                    boolean anyLoaded = false;
+                    for (Object plugin : (java.util.Collection<?>) getPlugins.invoke(pluginManager)) {
+                        if (getJarData.invoke(null, plugin.getClass()) != null) {
+                            anyLoaded = true;
+                            break;
+                        }
+                    }
+                    if (anyLoaded) return;
+                    System.out.println("RuneLiteSupport: Plugin Hub plugins not loaded, retrying (attempt " + (attempt + 1) + ")");
+                    update.invoke(externalManager);
+                } catch (InterruptedException e) {
+                    return;
+                } catch (Throwable e) {
+                    System.out.println("RuneLiteSupport: Plugin Hub retry failed: " + e);
+                }
+            }
+        }, "RuneLite-iOS-PluginHubRetry");
+        retry.setDaemon(true);
+        retry.start();
+    }
 
     /**
      * Positive amount scrolls down (zooms the camera out in OSRS). Caciocavallo's robot ignores the wheel, so
