@@ -418,6 +418,95 @@ public class RuneLiteSupport {
     private static final int TARGET_FPS = 60;
 
     /**
+     * On the phone, large Plugin Hub responses often stall inside the VPN tunnel while small requests and the
+     * game itself work. Give the hub's OkHttp client long timeouts and keep the last good (signed) manifest
+     * on disk, serving it when the network fetch fails. RuneLite still verifies the manifest signature.
+     */
+    private static void patchPluginHubClient(final ClassLoader loader, Object externalManager) throws Exception {
+        Class<?> hubClientClass = loader.loadClass("net.runelite.client.externalplugins.ExternalPluginClient");
+        Object hubClient = null;
+        for (java.lang.reflect.Field f : externalManager.getClass().getDeclaredFields()) {
+            if (f.getType() == hubClientClass) {
+                f.setAccessible(true);
+                hubClient = f.get(externalManager);
+            }
+        }
+        if (hubClient == null) throw new IllegalStateException("ExternalPluginClient not found");
+
+        Class<?> okClientClass = loader.loadClass("okhttp3.OkHttpClient");
+        java.lang.reflect.Field okField = null;
+        for (java.lang.reflect.Field f : hubClientClass.getDeclaredFields()) {
+            if (f.getType() == okClientClass) okField = f;
+        }
+        okField.setAccessible(true);
+        Object okClient = okField.get(hubClient);
+
+        final Class<?> interceptorClass = loader.loadClass("okhttp3.Interceptor");
+        final Class<?> chainClass = loader.loadClass("okhttp3.Interceptor$Chain");
+        final Class<?> requestClass = loader.loadClass("okhttp3.Request");
+        final Class<?> responseClass = loader.loadClass("okhttp3.Response");
+        final Class<?> bodyClass = loader.loadClass("okhttp3.ResponseBody");
+        final Class<?> mediaTypeClass = loader.loadClass("okhttp3.MediaType");
+        final Class<?> protocolClass = loader.loadClass("okhttp3.Protocol");
+        final java.io.File cacheDir = new java.io.File(System.getProperty("user.home"), ".runelite/ios-pluginhub-cache");
+
+        Object interceptor = java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[]{interceptorClass}, (proxy, method, args) -> {
+            switch (method.getName()) {
+                case "intercept": break;
+                case "hashCode": return System.identityHashCode(proxy);
+                case "equals": return proxy == args[0];
+                default: return "RuneLiteIOSManifestCache";
+            }
+            Object chain = args[0];
+            Object request = chainClass.getMethod("request").invoke(chain);
+            String url = String.valueOf(requestClass.getMethod("url").invoke(request));
+            Method proceed = chainClass.getMethod("proceed", requestClass);
+            if (!url.contains("/manifest/")) {
+                try {
+                    return proceed.invoke(chain, request);
+                } catch (java.lang.reflect.InvocationTargetException e) {
+                    throw e.getCause();
+                }
+            }
+            java.io.File cached = new java.io.File(cacheDir, url.substring(url.lastIndexOf('/') + 1));
+            try {
+                Object response = proceed.invoke(chain, request);
+                if ((int) responseClass.getMethod("code").invoke(response) != 200) return response;
+                Object body = responseClass.getMethod("body").invoke(response);
+                Object contentType = bodyClass.getMethod("contentType").invoke(body);
+                byte[] bytes = (byte[]) bodyClass.getMethod("bytes").invoke(body);
+                cacheDir.mkdirs();
+                java.nio.file.Files.write(cached.toPath(), bytes);
+                Object builder = responseClass.getMethod("newBuilder").invoke(response);
+                Object newBody = bodyClass.getMethod("create", mediaTypeClass, byte[].class).invoke(null, contentType, bytes);
+                builder.getClass().getMethod("body", bodyClass).invoke(builder, newBody);
+                return builder.getClass().getMethod("build").invoke(builder);
+            } catch (Throwable e) {
+                Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
+                if (!cached.isFile()) throw cause;
+                System.out.println("RuneLiteSupport: " + url + " failed (" + cause + "), using cached manifest");
+                byte[] bytes = java.nio.file.Files.readAllBytes(cached.toPath());
+                Object builder = loader.loadClass("okhttp3.Response$Builder").getConstructor().newInstance();
+                Class<?> b = builder.getClass();
+                b.getMethod("request", requestClass).invoke(builder, request);
+                b.getMethod("protocol", protocolClass).invoke(builder, Enum.valueOf((Class) protocolClass, "HTTP_1_1"));
+                b.getMethod("code", int.class).invoke(builder, 200);
+                b.getMethod("message", String.class).invoke(builder, "OK (cached)");
+                b.getMethod("body", bodyClass).invoke(builder, bodyClass.getMethod("create", mediaTypeClass, byte[].class).invoke(null, null, bytes));
+                return b.getMethod("build").invoke(builder);
+            }
+        });
+
+        Object builder = okClientClass.getMethod("newBuilder").invoke(okClient);
+        Class<?> b = builder.getClass();
+        b.getMethod("connectTimeout", long.class, java.util.concurrent.TimeUnit.class).invoke(builder, 30L, java.util.concurrent.TimeUnit.SECONDS);
+        b.getMethod("readTimeout", long.class, java.util.concurrent.TimeUnit.class).invoke(builder, 120L, java.util.concurrent.TimeUnit.SECONDS);
+        b.getMethod("addInterceptor", interceptorClass).invoke(builder, interceptor);
+        okField.set(hubClient, b.getMethod("build").invoke(builder));
+        System.out.println("RuneLiteSupport: Plugin Hub client patched (cache " + cacheDir + ")");
+    }
+
+    /**
      * RuneLite fetches the Plugin Hub manifest once at startup and loads no hub plugins if that request fails
      * (e.g. a SocketTimeoutException while the phone's network/VPN is still settling). Keep retrying in the
      * background until the installed hub plugins are actually running.
@@ -432,12 +521,17 @@ public class RuneLiteSupport {
         final Method update = managerClass.getMethod("update");
         final Method getJarData = managerClass.getMethod("getJarData", Class.class);
         final Method getPlugins = pluginManagerClass.getMethod("getPlugins");
+        try {
+            patchPluginHubClient(loader, externalManager);
+        } catch (Throwable e) {
+            System.out.println("RuneLiteSupport: patching Plugin Hub client failed: " + e);
+        }
 
         Thread retry = new Thread(() -> {
             // Give the normal startup load time to finish first
             for (int attempt = 0; attempt < 10; attempt++) {
                 try {
-                    Thread.sleep(attempt == 0 ? 45000 : 30000);
+                    Thread.sleep(attempt == 0 ? 20000 : 30000);
                     if (((java.util.List<?>) installed.invoke(externalManager)).isEmpty()) return;
                     boolean anyLoaded = false;
                     for (Object plugin : (java.util.Collection<?>) getPlugins.invoke(pluginManager)) {
