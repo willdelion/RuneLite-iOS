@@ -120,7 +120,13 @@ The controls mimic the official OSRS mobile app:
 
 - **Automatic** is a safe default for your device.
 - More memory means fewer stutters, but if you set it too high iOS will close the game. If the game quits by itself, lower this value. Changes apply on the next launch.
-- RuneLite plugins that use a lot of memory (GPU/117 HD, large map overlays) need more of it.
+- Many Plugin Hub plugins or memory-heavy ones (large map overlays) need more of it. The GPU and 117 HD plugins are not available on iOS.
+
+### Display
+
+- In the default **Fixed** layout the game is scaled up to the full screen height, keeping its proportions, with black bars on the sides.
+- For a game view that fills the whole screen, switch the in-game layout: **Settings (wrench) → Display → Game client layout → Resizable**. The 3D view is then drawn at the screen's own resolution.
+- Upscaling is configured in RuneLite's **Stretched Mode** plugin (enabled by default). Turn *Keep aspect ratio* off there if you prefer a stretched full-width Fixed layout.
 
 ## 8. Keeping the app working (7-day signing)
 
@@ -148,7 +154,7 @@ StikDebug is not installed, or the app can't open it. Install StikDebug and impo
 - Developer Mode is off: turn it on (section 3).
 
 **The game closes by itself after a while**
-iOS ran out of memory. Lower **Settings → RuneLite Memory**, close other apps, and disable heavy plugins such as GPU/HD.
+iOS ran out of memory. Lower **Settings → RuneLite Memory**, close other apps, and disable memory-heavy plugins.
 
 **Jagex sign-in fails or loops**
 Try again over a stable connection. Turn other VPNs off. If it keeps failing, tap the account card → **Sign out**, then sign in again.

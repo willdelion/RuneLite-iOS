@@ -138,11 +138,12 @@ public class RuneLiteSupport {
     }
 
     // Phone-friendly defaults, applied once per RuneLite profile so the player can change them afterwards
-    private static final String DEFAULTS_VERSION = "6";
+    private static final String DEFAULTS_VERSION = "7";
     private static final String[][] DEFAULT_CONFIG = {
-        // Fill the whole wide phone screen; fixed mode gets stretched horizontally
-        {"stretchedmode", "keepAspectRatio", "false"},
-        {"stretchedmode", "increasedPerformance", "true"},
+        // Scale fixed mode up to the screen height without distorting it, with smooth (bilinear) filtering;
+        // resizable mode fills the whole screen natively
+        {"stretchedmode", "keepAspectRatio", "true"},
+        {"stretchedmode", "increasedPerformance", "false"},
         // Plugin Hub plugins load after this runs; their enabled flag is read from config when they do
         {"runelite", "camerasmoothingplugin", "false"},
         // No window title bar on a phone screen (takes effect on the next launch)

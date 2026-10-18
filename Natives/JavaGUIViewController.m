@@ -268,6 +268,14 @@ void AWTInputBridge_sendKey(int keycode) {
     self.surfaceScrollView.maximumZoomScale = 5;
     self.surfaceScrollView.scrollEnabled = NO;
     [self.view addSubview:self.surfaceScrollView];
+    if (isRuneLiteMode) {
+        // The game frame is drawn at RUNELITE_RENDER_SCALE pixels per point; when that divides the screen
+        // scale evenly (2x on 3x iPhones) upscale pixel-exact instead of blurring it
+        CGFloat factor = UIScreen.mainScreen.nativeScale / RUNELITE_RENDER_SCALE;
+        if (fabs(factor - round(factor)) < 0.01) {
+            surfaceView.layer.magnificationFilter = kCAFilterNearest;
+        }
+    }
 
     self.inputTextField = [[TrackedTextField alloc] initWithFrame:CGRectMake(0, -32.0, self.view.frame.size.width, 30.0)];
     self.inputTextField.backgroundColor = UIColor.secondarySystemBackgroundColor;
