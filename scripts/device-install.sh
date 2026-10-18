@@ -1,12 +1,16 @@
 #!/bin/bash
-# Re-sign the device build with the free Apple ID profile and install it on the connected iPhone.
-# Profiles from a personal team last 7 days; rerun this to refresh.
+# Developer helper: re-sign the device build with a free Apple ID profile and install it on a connected iPhone.
+# Profiles from a personal team last 7 days; rerun this to refresh. Most players should use SideStore/AltStore instead.
+#   DEVICE     device UDID (xcrun devicectl list devices)
+#   BUNDLE_ID  bundle id registered to your team, e.g. com.yourname.runelite
+#   IDENTITY   signing identity (security find-identity -v -p codesigning)
+#   PROVISION  folder with an Xcode stub project (Stub.xcodeproj) that uses BUNDLE_ID and your team
 set -e
 cd "$(dirname "$0")/.."
-DEVICE=${DEVICE:-00008150-000E69801EC1401C}
-BUNDLE_ID=${BUNDLE_ID:-com.willdel.sideload.runelite}
-IDENTITY=${IDENTITY:-"Apple Development: flyarkovskyav@gmail.com (FASRW287V3)"}
-PROVISION=~/Developer/RuneLiteIOS-provision
+: "${DEVICE:?set DEVICE to your iPhone UDID}"
+: "${BUNDLE_ID:?set BUNDLE_ID to a bundle id registered to your team}"
+: "${IDENTITY:?set IDENTITY to your Apple Development signing identity}"
+PROVISION=${PROVISION:-~/Developer/RuneLiteIOS-provision}
 
 # Refresh the profile through the stub project (Xcode handles the Apple ID side)
 xcodebuild -project $PROVISION/Stub.xcodeproj -scheme Stub -configuration Debug \
