@@ -87,7 +87,7 @@ iOS normally blocks *JIT* (just-in-time compilation). Without it Java, and there
 1. Open **RuneLite** from the home screen. You get the launcher with three items:
    - **Account card** at the top: shows *Sign in with a Jagex Account*, or your character name once you are signed in.
    - **Play**.
-   - **Settings**.
+   - **Settings**: memory for the game and the **Fill the Screen** display option.
 2. **Sign in (Jagex Account holders):** tap the account card. The official Jagex login page opens inside the app. Sign in with your e-mail, password and 2FA as usual, then choose the character you want to play. The launcher now shows your character name.
    - Your session is stored only on your device, in the iOS Keychain. Your password is never seen or stored by the app; you type it only into Jagex's own web page.
    - To switch characters or accounts, tap the account card again (**Jagex Account · Change**) and choose **Switch character**, **Sign in again** or **Sign out**.
@@ -124,9 +124,9 @@ The controls mimic the official OSRS mobile app:
 
 ### Display
 
-- The game is upscaled to fill the whole screen with RuneLite's **Stretched Mode** plugin (enabled by default). In the default **Fixed** layout the picture is stretched a little wider to cover the wide phone screen.
-- Prefer exact proportions? Open the Stretched Mode plugin settings and turn **Keep aspect ratio** on (black bars appear on the sides).
-- Or switch the in-game layout to **Resizable** (**Settings (wrench) → Display → Game client layout**): the 3D view is then drawn at the screen's own size with no stretching at all.
+- By default the launcher switches the game to its **Resizable** layout, so the login screen and the game fill the whole wide screen: the picture is extended to the sides, not stretched.
+- The game image is then upscaled sharply to the screen by RuneLite's **Stretched Mode** plugin (enabled by default).
+- Prefer the classic **Fixed** layout? Turn off **Settings → Display → Fill the Screen** in the launcher, then pick the layout in the game (**Settings (wrench) → Display → Game client layout**). Fixed is stretched to the screen width; turn **Keep aspect ratio** on in the Stretched Mode plugin for exact proportions with black bars.
 
 ## 8. Keeping the app working (7-day signing)
 

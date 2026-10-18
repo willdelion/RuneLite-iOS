@@ -177,6 +177,7 @@ public class RuneLiteSupport {
             }
 
             initClient(loader, injector);
+            useResizableLayout(loader, injector);
             retryPluginHub(loader, injector);
 
             Class<?> configManagerClass = loader.loadClass("net.runelite.client.config.ConfigManager");
@@ -419,6 +420,142 @@ public class RuneLiteSupport {
     }
 
     private static final int TARGET_FPS = 60;
+
+    /**
+     * Switch the game to the Resizable layout on the login screen, so the login screen and the game fill the wide
+     * phone screen instead of a stretched 765x503 Fixed frame. The server picks the in-game layout from the client's
+     * mode at login. Skipped when the player turned it off in the launcher settings.
+     */
+    private static void useResizableLayout(final ClassLoader loader, final Object injector) {
+        if ("0".equals(System.getenv("RUNELITE_IOS_RESIZABLE"))) {
+            return;
+        }
+        Thread t = new Thread(() -> {
+            try {
+                final Class<?> clientClass = loader.loadClass("net.runelite.api.Client");
+                final Method setter = findWindowModeSetter(client.getClass());
+                if (setter == null) {
+                    System.out.println("RuneLiteSupport: layout switch not found in this game version");
+                    return;
+                }
+                Method gameState = clientClass.getMethod("getGameState");
+                for (int i = 0; i < 600 && !String.valueOf(gameState.invoke(client)).startsWith("LOGIN_SCREEN"); i++) {
+                    Thread.sleep(500);
+                }
+                final Method isResized = clientClass.getMethod("isResized");
+                if (Boolean.TRUE.equals(isResized.invoke(client))) {
+                    return;
+                }
+                Object clientThread = loader.loadClass("com.google.inject.Injector").getMethod("getInstance", Class.class)
+                    .invoke(injector, loader.loadClass("net.runelite.client.callback.ClientThread"));
+                Runnable switchLayout = () -> {
+                    try {
+                        setter.invoke(null, 2);
+                        System.out.println("RuneLiteSupport: switched to the Resizable layout (" + setter.getName() + ")");
+                    } catch (Throwable e) {
+                        System.out.println("RuneLiteSupport: layout switch failed: " + e);
+                    }
+                };
+                Method invoke = clientThread.getClass().getMethod("invoke", Runnable.class);
+                invoke.invoke(clientThread, switchLayout);
+                // The canvas keeps its Fixed size until the game is told to lay it out again
+                Thread.sleep(1000);
+                invoke.invoke(clientThread, (Runnable) () -> {
+                    try {
+                        client.getClass().getMethod("resizeCanvas").invoke(client);
+                    } catch (Throwable e) {
+                        System.out.println("RuneLiteSupport: canvas resize failed: " + e);
+                    }
+                });
+            } catch (Throwable e) {
+                System.out.println("RuneLiteSupport: layout switch failed: " + e);
+            }
+        }, "RuneLite-iOS-Layout");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * The game's own Fixed/Resizable switch is obfuscated and renamed with every game update. Find it in the client's
+     * bytecode: a static (I)V method that writes the field behind isResized() and picks the 765x503 or 7680x2160
+     * canvas limits depending on whether the mode is below 2.
+     */
+    private static Method findWindowModeSetter(Class<?> clientImpl) throws Exception {
+        byte[] bytes;
+        try (java.io.InputStream in = clientImpl.getClassLoader().getResourceAsStream(clientImpl.getName().replace('.', '/') + ".class")) {
+            if (in == null) return null;
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[1 << 16];
+            for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+            bytes = out.toByteArray();
+        }
+        java.io.DataInputStream d = new java.io.DataInputStream(new java.io.ByteArrayInputStream(bytes));
+        d.skipBytes(8);
+        int count = d.readUnsignedShort();
+        String[] utf = new String[count];
+        for (int i = 1; i < count; i++) {
+            int tag = d.readUnsignedByte();
+            if (tag == 1) utf[i] = d.readUTF();
+            else if (tag == 5 || tag == 6) { d.skipBytes(8); i++; }
+            else if (tag == 7 || tag == 8 || tag == 16 || tag == 19 || tag == 20) d.skipBytes(2);
+            else if (tag == 15) d.skipBytes(3);
+            else d.skipBytes(4);
+        }
+        d.skipBytes(6);
+        d.skipBytes(2 * d.readUnsignedShort());
+        for (int f = d.readUnsignedShort(); f > 0; f--) {
+            d.skipBytes(6);
+            for (int a = d.readUnsignedShort(); a > 0; a--) { d.skipBytes(2); d.skipBytes(d.readInt()); }
+        }
+        java.util.Map<String, byte[]> code = new java.util.HashMap<>();
+        java.util.Map<String, Integer> access = new java.util.HashMap<>();
+        for (int m = d.readUnsignedShort(); m > 0; m--) {
+            int acc = d.readUnsignedShort();
+            String key = utf[d.readUnsignedShort()] + utf[d.readUnsignedShort()];
+            for (int a = d.readUnsignedShort(); a > 0; a--) {
+                String attr = utf[d.readUnsignedShort()];
+                int len = d.readInt();
+                if ("Code".equals(attr)) {
+                    d.skipBytes(4);
+                    byte[] c = new byte[d.readInt()];
+                    d.readFully(c);
+                    d.skipBytes(len - 8 - c.length);
+                    code.put(key, c);
+                    access.put(key, acc);
+                } else {
+                    d.skipBytes(len);
+                }
+            }
+        }
+        // isResized() is "getstatic <field>; ireturn"
+        byte[] getter = code.get("isResized()Z");
+        if (getter == null || (getter[0] & 0xff) != 0xb2) return null;
+        byte[] put = {(byte) 0xb3, getter[1], getter[2]};
+        for (java.util.Map.Entry<String, byte[]> e : code.entrySet()) {
+            String key = e.getKey();
+            if (!key.endsWith("(I)V") || (access.get(key) & 0x8) == 0) continue;
+            byte[] c = e.getValue();
+            if (indexOf(c, put) >= 0 && indexOf(c, new byte[]{0x1a, 0x05}) >= 0
+                && indexOf(c, new byte[]{0x11, 0x02, (byte) 0xfd}) >= 0 && indexOf(c, new byte[]{0x11, 0x01, (byte) 0xf7}) >= 0
+                && indexOf(c, new byte[]{0x11, 0x1e, 0x00}) >= 0) {
+                Method setter = clientImpl.getDeclaredMethod(key.substring(0, key.length() - 4), int.class);
+                setter.setAccessible(true);
+                return setter;
+            }
+        }
+        return null;
+    }
+
+    private static int indexOf(byte[] data, byte[] pattern) {
+        outer:
+        for (int i = 0; i + pattern.length <= data.length; i++) {
+            for (int j = 0; j < pattern.length; j++) {
+                if (data[i + j] != pattern[j]) continue outer;
+            }
+            return i;
+        }
+        return -1;
+    }
 
     /**
      * On the phone, large Plugin Hub responses often stall inside the VPN tunnel while small requests and the
