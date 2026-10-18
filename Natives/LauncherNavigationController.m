@@ -440,8 +440,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)showJITAppMissing {
     self.progressText.text = nil;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Нужен StikDebug"
-        message:@"Чтобы RuneLite работал быстро, iOS требует включить JIT через StikDebug, а он не установлен. Установите StikDebug, импортируйте в нём файл сопряжения и запустите RuneLite снова."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"StikDebug Required"
+        message:@"iOS needs JIT enabled through StikDebug for RuneLite to run at a playable speed, but StikDebug is not installed. Install StikDebug, import your pairing file into it, then launch RuneLite again."
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];

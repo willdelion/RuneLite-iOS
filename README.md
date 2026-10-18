@@ -1,107 +1,196 @@
-# Angel Aura Amethyst (iOS)
-[![Development build](https://github.com/AngelAuraMC/Amethyst-iOS/actions/workflows/development.yml/badge.svg?branch=main)](https://github.com/AngelAuraMC/Amethyst-iOS/actions/workflows/development.yml)
-[![Crowdin](https://badges.crowdin.net/angelauramc/localized.svg)](https://crowdin.com/project/angelauramc)
-[![Discord](https://img.shields.io/discord/724163890803638273.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/5ptqkyZxEy)
+# RuneLite for iOS
 
+Play Old School RuneScape with the [RuneLite](https://runelite.net) client on an iPhone or iPad, with your own Jagex account, plugins, and the Plugin Hub.
 
+This is a fork of [Amethyst (Angel Aura Amethyst) for iOS](https://github.com/AngelAuraMC/Amethyst-iOS), a Java launcher for iOS. It runs the regular desktop RuneLite client inside an embedded Java 17 runtime and adds:
 
-## Introduction
-Amethyst is a Minecraft: Java Edition launcher for Android, iOS, and iPadOS, based off of zhuowei's [Boardwalk](https://github.com/zhuowei/Boardwalk) project.
-* Supports most versions of Minecraft: Java Edition, from the very first beta to the newest snapshots.
-* Supports Forge, Fabric, OptiFine, and Quilt for you to customize the experience with supported mods.
-* Includes customizable on-screen controls, keyboard and mouse support, and game controller support.
-* Optimized for jailbroken and TrollStore devices to enable better capabilities.
-* Microsoft account and demo mode support for logging into Minecraft.
-* ...and much more!
+- A simple launcher: **Jagex Account**, **Play**, **Settings**.
+- Jagex Account sign-in through the official Jagex login page (the same flow the Jagex Launcher uses).
+- Touch controls in the style of OSRS mobile.
+- JIT handled automatically through [StikDebug](https://github.com/StephenDev0/StikDebug): tap Play and the game starts by itself.
+- Plugin Hub fixes for slow mobile/VPN connections.
 
-This repository contains the code for our iOS and iPadOS port of Amethyst. Looking for [Android?](https://github.com/AngelAuraMC/Amethyst-Android)
+> **Unofficial project.** It is not affiliated with or endorsed by Jagex or RuneLite. RuneLite is an approved third-party client on desktop, but running it on iOS this way is not officially supported. Use it at your own risk.
 
-## Getting started with Amethyst
-The [Amethyst wiki](https://wiki.angelauramc.dev/wiki/getting_started/INSTALL.html#ios) has extensive documentation on how to install, set up, and play! For those who wish to install quickly, here's the basics:
+---
 
-### Requirements
-At the minimum, you'll need one of the following devices on **iOS 14.0** and later:
-- iPhone 6s and later
-- iPad (5th generation) and later
-- iPad Air (2nd generation) and later
-- iPad mini (4th generation) and later
-- iPad Pro (all models)
-- iPod touch (7th generation)
+## Contents
 
-However, we recommend one of the following devices on **iOS 14.0** and later:
-- iPhone XS and later, excluding iPhone XR and iPhone SE (2nd generation)
-- iPad (10th generation) and later
-- iPad Air (4th generation) and later
-- iPad mini (6th generation) and later
-- iPad Pro (all models, except for 9.7-inch)
+1. [Requirements](#1-requirements)
+2. [Download the IPA](#2-download-the-ipa)
+3. [Install the app (sideload)](#3-install-the-app-sideload)
+4. [Set up JIT with StikDebug](#4-set-up-jit-with-stikdebug)
+5. [First launch and signing in](#5-first-launch-and-signing-in)
+6. [Touch controls](#6-touch-controls)
+7. [Settings](#7-settings)
+8. [Keeping the app working (7-day signing)](#8-keeping-the-app-working-7-day-signing)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Building from source](#10-building-from-source)
+11. [Credits and license](#11-credits-and-license)
 
-Recommended devices provide a smoother and more enjoyable gameplay experience compared to other supported devices.
-- iOS 17.x and iOS 18.x is supported. However, a computer is required. For more information, please check out [the official wiki](https://wiki.angelauramc.dev/wiki/faq/ios/JIT.html#what-are-the-methods-to-enable-jit)
+---
 
-### Setting up to sideload
-Amethyst can be sideloaded in many ways. Our recommended solution is to install [TrollStore](https://github.com/opa334/TrollStore) if your iOS version supports it. Installing with TrollStore allows you to permanently sign the application, automatically enable JIT, and increase memory limits.
+## 1. Requirements
 
-If you cannot, [AltStore](https://altstore.io) and [SideStore](https://sidestore.io) are your next best options.
-- Signing services that do not use your UDID (and use distribution certificates) are not supported, as Amethyst requires capabilities they do not allow. However, if you do managed to gain access to a Development certificate, due to it having the necessary entitlement (being com.apple.security.get-task-allow) to attach a debugger to the running process (enabling JIT), you may use a Development certificate.
-  
-- Only install sideloading software and Amethyst from trusted sources. We are not responsible for any harm caused by using unofficial software.
-- Jailbreaks also benefit from permenant signing, autoJIT, and increased memory limits. However, we do not recommend them on devices intended for regular use.
+- **iPhone or iPad on iOS 17 or newer.** A device with **6 GB of RAM or more** is strongly recommended (iPhone 13 Pro / 14 / 15 / 16 / 17 series, M-series iPads). It may start on older devices but can be closed by iOS for using too much memory.
+- **A computer (Mac, Windows or Linux) for the one-time setup.** It is needed to install the app the first time and to create the StikDebug pairing file. After that you can play without it.
+- **A free Apple ID** (a paid developer account works too and lasts longer, see [section 8](#8-keeping-the-app-working-7-day-signing)).
+- **An Old School RuneScape account** (a Jagex Account or a legacy account).
 
-### Installing Amethyst
-#### Release build (TrollStore)
-1. Download an IPA of Amethyst in [Releases](https://github.com/AngelAuraMC/Amethyst-iOS/releases).
-2. Open the package in TrollStore using the share menu.
+## 2. Download the IPA
 
-#### Release build (AltStore/SideStore trusted source)
-These builds will be available soon, stay tuned.
+1. Open the [**Releases**](../../releases/latest) page of this repository.
+2. Download `RuneLite-iOS.ipa` from the **Assets** list.
 
-#### Nightly builds
-*These builds can contain game-breaking bugs. Use with caution.*
-1. Download an IPA build of Amethyst in the [Actions tab](https://github.com/AngelAuraMC/Amethyst-iOS/actions).
-2. Open the downloaded IPA in your sideloading app to install.
+The IPA is unsigned. Your sideloading tool signs it with your own Apple ID, so every player installs their own copy and nobody's account is shared.
 
-#### Nightly builds (AltStore/SideStore trusted sources)
-These builds will be available soon, stay tuned.
+## 3. Install the app (sideload)
 
-### Enabling JIT
-Amethyst makes use of **just-in-time compilation**, or JIT, to provide usable speeds for the end user. JIT is not supported on iOS without the application being debugged, so workarounds are required to enable it. You can use this chart to determine the best solution for you and your setup.
-| Application         | AltStore | SideStore | StikDebug | TrollStore | Jitterbug          | Jailbroken |
-|---------------------|----------|-----------|-----------|------------|--------------------|------------|
-| Requires ext-device | Yes      | Yes (#)   | Yes (#)   | No         | If VPN unavailable | No         |
-| Requires Wi-Fi      | Yes      | Yes (#)   | Yes (#)   | No         | Yes                | No         |
-| Auto enabled        | Yes (*)  | No        | Yes       | Yes        | No                 | Yes        |
+Apps outside the App Store have to be *sideloaded*. Pick one of these tools. **SideStore** is recommended because it can also re-sign the app from the phone later.
 
-(*) AltServer running on the local network is required.
-(#) Only the first time.
+### Option A: SideStore (recommended)
 
-## Contributors
-Amethyst is amazing, and surprisingly stable, and it wouldn't be this way without the commmunity that helped and contribute to the project! Some notable names:
+1. Install SideStore by following the official guide: <https://docs.sidestore.io/docs/installation/prerequisites>. Its setup creates a **pairing file**; keep it, StikDebug uses the same kind of file.
+2. On the iPhone, open the downloaded `RuneLite-iOS.ipa` (Files app → share → **SideStore**), or in SideStore go to **My Apps → +** and pick the IPA.
+3. Wait for it to finish. A **RuneLite** icon appears on the home screen.
 
-@crystall1nedev - Project manager, iOS port developer  
-@khanhduytran0 - iOS port developer  
-@artdeell  
-@Mathius-Boulay  
-@zhuowei  
-@jkcoxson   
-@Diatrus 
+### Option B: AltStore
 
-## Third party components and their licenses
-- [Caciocavallo](https://github.com/PojavLauncherTeam/caciocavallo): [GNU GPLv2 License](https://github.com/PojavLauncherTeam/caciocavallo/blob/master/LICENSE).
-- [jsr305](https://code.google.com/p/jsr-305): [3-Clause BSD License](http://opensource.org/licenses/BSD-3-Clause).
-- [Boardwalk](https://github.com/zhuowei/Boardwalk): [Apache 2.0 License](https://github.com/zhuowei/Boardwalk/blob/master/LICENSE) 
-- [GL4ES](https://github.com/ptitSeb/gl4es) by @lunixbochs @ptitSeb: [MIT License](https://github.com/ptitSeb/gl4es/blob/master/LICENSE).
-- [Mesa 3D Graphics Library](https://gitlab.freedesktop.org/mesa/mesa): [MIT License](https://docs.mesa3d.org/license.html).
-- [MetalANGLE](https://github.com/khanhduytran0/metalangle) by @kakashidinho and ANGLE team: [BSD 2.0 License](https://github.com/kakashidinho/metalangle/blob/master/LICENSE).
-- [MoltenVK](https://github.com/KhronosGroup/MoltenVK): [Apache 2.0 License](https://github.com/KhronosGroup/MoltenVK/blob/master/LICENSE).
-- [openal-soft](https://github.com/kcat/openal-soft): [LGPLv2 License](https://github.com/kcat/openal-soft/blob/master/COPYING).
-- [Azul Zulu JDK](https://www.azul.com/downloads/?package=jdk): [GNU GPLv2 License](https://openjdk.java.net/legal/gplv2+ce.html).
-- [LWJGL3](https://github.com/PojavLauncherTeam/lwjgl3): [BSD-3 License](https://github.com/LWJGL/lwjgl3/blob/master/LICENSE.md).
-- [LWJGLX](https://github.com/PojavLauncherTeam/lwjglx) (LWJGL2 API compatibility layer for LWJGL3): unknown license.
-- [DBNumberedSlider](https://github.com/khanhduytran0/DBNumberedSlider): [Apache 2.0 License](https://github.com/immago/DBNumberedSlider/blob/master/LICENSE)
-- [fishhook](https://github.com/khanhduytran0/fishhook): [BSD-3 License](https://github.com/facebook/fishhook/blob/main/LICENSE).
-- [shaderc](https://github.com/khanhduytran0/shaderc) (used by Vulkan rendering mods): [Apache 2.0 License](https://github.com/google/shaderc/blob/main/LICENSE).
-- [NRFileManager](https://github.com/mozilla-mobile/firefox-ios/tree/b2f89ac40835c5988a1a3eb642982544e00f0f90/ThirdParty/NRFileManager): [MPL-2.0 License](https://www.mozilla.org/en-US/MPL/2.0)
-- [AltKit](https://github.com/rileytestut/AltKit)
-- [UnzipKit](https://github.com/abbeycode/UnzipKit): [BSD-2 License](https://github.com/abbeycode/UnzipKit/blob/master/LICENSE).
-- [DyldDeNeuralyzer](https://github.com/xpn/DyldDeNeuralyzer): bypasses Library Validation for loading external runtime
-- Thanks to [MCHeads](https://mc-heads.net) for providing Minecraft avatars.
+1. Install AltServer on your computer and AltStore on the phone: <https://faq.altstore.io/>.
+2. In AltStore, **My Apps → +** and choose `RuneLite-iOS.ipa`.
+
+### Option C: Sideloadly (computer only)
+
+1. Install [Sideloadly](https://sideloadly.io) on your computer and connect the phone with a cable.
+2. Drag `RuneLite-iOS.ipa` into Sideloadly, enter your Apple ID and press **Start**.
+
+### After installing (all options)
+
+- **Trust the developer profile:** Settings → General → VPN & Device Management → your Apple ID → **Trust**.
+- **Turn on Developer Mode** (iOS 16+): Settings → Privacy & Security → **Developer Mode** → on, then restart the phone and confirm.
+
+> **TrollStore users:** if your iOS version supports [TrollStore](https://github.com/opa334/TrollStore), install the IPA with TrollStore instead. It is signed permanently and JIT is enabled automatically, so you can skip section 4 and section 8.
+
+## 4. Set up JIT with StikDebug
+
+iOS normally blocks *JIT* (just-in-time compilation). Without it Java, and therefore RuneLite, is far too slow to play. **StikDebug** enables JIT for RuneLite right on the phone, without a computer, every time you press Play.
+
+1. **Install StikDebug.** Get it from the App Store if it is available in your region, or sideload it the same way as RuneLite. See <https://github.com/StephenDev0/StikDebug>.
+2. **Create a pairing file** on your computer (one time). Use the [**StikPair / iloader**](https://github.com/StephenDev0/StikDebug) tool linked from the StikDebug page (or the pairing file from your SideStore setup). Connect the phone with a cable, unlock it, tap **Trust** on the phone, and save the `.mobiledevicepairing` / `.plist` file it produces.
+3. **Import the pairing file into StikDebug:** send the file to the phone (AirDrop, iCloud Drive, e-mail to yourself), open StikDebug and import it when it asks.
+4. **Install LocalDevVPN.** StikDebug talks to the phone through a local VPN app called **LocalDevVPN** (free on the App Store). Install it and allow it to add a VPN configuration. StikDebug will tell you if anything is still missing.
+
+> iOS allows only one VPN at a time. If you use another VPN (Tailscale, a privacy VPN, etc.) it is switched off while LocalDevVPN is active.
+
+## 5. First launch and signing in
+
+1. Open **RuneLite** from the home screen. You get the launcher with three items:
+   - **Account card** at the top: shows *Sign in with a Jagex Account*, or your character name once you are signed in.
+   - **Play**.
+   - **Settings**.
+2. **Sign in (Jagex Account holders):** tap the account card. The official Jagex login page opens inside the app. Sign in with your e-mail, password and 2FA as usual, then choose the character you want to play. The launcher now shows your character name.
+   - Your session is stored only on your device, in the iOS Keychain. Your password is never seen or stored by the app; you type it only into Jagex's own web page.
+   - To switch characters or accounts, tap the account card again (**Jagex Account · Change**) and choose **Switch character**, **Sign in again** or **Sign out**.
+3. **Legacy (non-Jagex) accounts:** don't sign in on the launcher. Just tap **Play** and log in on the normal RuneScape login screen inside the game.
+4. **Tap Play.** The first time:
+   - The app opens StikDebug, which enables JIT and sends you back automatically. The status reads *Waiting for StikDebug to enable JIT. The game will start automatically*.
+   - RuneLite then starts. **The first start takes a while** (it downloads the game client and plugins). Later starts are faster.
+5. If StikDebug asks which script to use for RuneLite, choose the **Universal JIT** script (the app passes it automatically on most versions).
+
+## 6. Touch controls
+
+The controls mimic the official OSRS mobile app:
+
+| Gesture | Action |
+|---|---|
+| Tap | Left click (walk, attack, interact) |
+| Press and hold | Right click (opens the menu with all options) |
+| Hold, then drag | Drag items (inventory, bank) |
+| Drag on the game view | Rotate the camera |
+| Drag on a side panel / list | Scroll |
+| Pinch | Zoom the camera in/out |
+
+- A keyboard appears when you tap a text field (chat, bank search, login).
+- A Bluetooth keyboard and mouse also work.
+- The RuneLite sidebar (plugins, settings, Plugin Hub) works like on desktop.
+
+## 7. Settings
+
+**Settings → RuneLite Memory** sets how much memory Java may use.
+
+- **Automatic** is a safe default for your device.
+- More memory means fewer stutters, but if you set it too high iOS will close the game. If the game quits by itself, lower this value. Changes apply on the next launch.
+- RuneLite plugins that use a lot of memory (GPU/117 HD, large map overlays) need more of it.
+
+## 8. Keeping the app working (7-day signing)
+
+With a **free Apple ID**, Apple lets sideloaded apps run for **7 days**. After that the app won't open until it is signed again. Your RuneLite settings and sign-in are kept when you refresh.
+
+- **SideStore:** open SideStore and tap **Refresh All** (works on the phone itself, but needs LocalDevVPN on). Do it at least once a week.
+- **AltStore:** keep AltServer running on a computer on the same Wi-Fi; AltStore refreshes in the background, or tap **Refresh All**.
+- **Sideloadly:** install the IPA again from the computer.
+- A **paid Apple Developer account** ($99/year) makes signing last one year.
+
+A free Apple ID can have at most **3 sideloaded apps** at once (SideStore/AltStore, StikDebug and RuneLite count towards this if you sideloaded StikDebug).
+
+## 9. Troubleshooting
+
+**"StikDebug Required" message**
+StikDebug is not installed, or the app can't open it. Install StikDebug and import the pairing file (section 4).
+
+**Stuck on "Waiting for StikDebug…"**
+- Make sure LocalDevVPN is installed and StikDebug shows it as connected.
+- Re-import the pairing file in StikDebug. A pairing file stops working after you reset the phone, "Reset Location & Privacy", or update iOS in some cases. Create a new one in that case.
+- Tap **Cancel**, close RuneLite from the app switcher and try again.
+
+**The app doesn't open / crashes immediately**
+- The 7-day signature expired: refresh it (section 8).
+- Developer Mode is off: turn it on (section 3).
+
+**The game closes by itself after a while**
+iOS ran out of memory. Lower **Settings → RuneLite Memory**, close other apps, and disable heavy plugins such as GPU/HD.
+
+**Jagex sign-in fails or loops**
+Try again over a stable connection. Turn other VPNs off. If it keeps failing, tap the account card → **Sign out**, then sign in again.
+
+**Plugin Hub plugins don't appear**
+The Plugin Hub list can time out on slow connections. Restart the game on a better connection; the last good list is cached and reused automatically.
+
+**It's slow**
+JIT is probably not enabled. The launcher status should say *JIT is enabled* after StikDebug ran. Use a newer device if possible, and lower the in-game draw distance.
+
+## 10. Building from source
+
+You only need this if you want to change the code. Requirements: a Mac with Xcode, CMake, `ldid`, `wget`, and a JDK 8 to build the Java parts.
+
+```bash
+git clone --recursive https://github.com/willdelion/RuneLite-iOS.git
+cd RuneLite-iOS
+make java BOOTJDK=/path/to/jdk8/bin
+make package PLATFORM=2 BOOTJDK=/path/to/jdk8/bin
+```
+
+The unsigned IPA is written to `artifacts/`. Then sign and install it with any tool from section 3.
+
+Developer helpers in `scripts/`:
+
+- `sim-run.sh`: build for the iOS Simulator and launch it there (set the `BOOTJDK` path inside the script).
+- `sim-log.sh`: print the game log from the simulator.
+- `device-install.sh`: re-sign the device build with your own free Apple ID and install it over USB or Wi-Fi with `xcrun devicectl`. Set `DEVICE`, `BUNDLE_ID` and `IDENTITY` first (see the comments in the script).
+
+The RuneLite-specific code lives in:
+
+- `Natives/RuneLiteLauncherViewController.m`: the launcher screen and settings.
+- `Natives/JagexAccount.m`: Jagex Account sign-in and session storage.
+- `Natives/JavaGUIViewController.m`: touch controls.
+- `JavaApp/src/.../RuneLiteSupport.java`: Java-side fixes (input, Swing repaint, Plugin Hub).
+- `RuneLite/`: the bundled RuneLite launcher jar and icon.
+
+## 11. Credits and license
+
+- [Amethyst for iOS](https://github.com/AngelAuraMC/Amethyst-iOS) by the Angel Aura MC team, based on PojavLauncher and Boardwalk. The original README is in [README.amethyst.md](README.amethyst.md).
+- [RuneLite](https://github.com/runelite/runelite), BSD 2-Clause license.
+- [StikDebug](https://github.com/StephenDev0/StikDebug) and [SideStore](https://sidestore.io) for JIT and sideloading.
+- Old School RuneScape is a trademark of Jagex Ltd.
+
+This project is distributed under the same license as Amethyst: see [LICENSE](LICENSE).

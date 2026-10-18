@@ -37,7 +37,7 @@ static NSInteger autoMemoryMB(void) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Настройки";
+    self.title = @"Settings";
 
     self.memoryLabel = [[UILabel alloc] init];
     self.memoryLabel.font = [UIFont monospacedDigitSystemFontOfSize:17 weight:UIFontWeightRegular];
@@ -55,13 +55,13 @@ static NSInteger autoMemoryMB(void) {
     NSInteger mb = automatic ? autoMemoryMB() : getPrefInt(@"java.allocated_memory");
     self.memorySlider.value = mb;
     self.memorySlider.enabled = !automatic;
-    self.memoryLabel.text = [NSString stringWithFormat:@"%ld МБ", (long)mb];
+    self.memoryLabel.text = [NSString stringWithFormat:@"%ld MB", (long)mb];
 }
 
 - (void)memoryChanged {
     NSInteger mb = lroundf(self.memorySlider.value / 64) * 64;
     setPrefInt(@"java.allocated_memory", mb);
-    self.memoryLabel.text = [NSString stringWithFormat:@"%ld МБ", (long)mb];
+    self.memoryLabel.text = [NSString stringWithFormat:@"%ld MB", (long)mb];
 }
 
 - (void)autoChanged:(UISwitch *)sender {
@@ -81,18 +81,18 @@ static NSInteger autoMemoryMB(void) {
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return @"Память для RuneLite";
+    return @"RuneLite Memory";
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"Больше памяти — меньше подвисаний, но iOS может закрыть игру, если выделить слишком много. Изменения применяются при следующем запуске.";
+    return @"More memory means fewer stutters, but iOS may close the game if you allocate too much. Changes apply on the next launch.";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     if (indexPath.row == 0) {
-        cell.textLabel.text = @"Автоматически";
+        cell.textLabel.text = @"Automatic";
         UISwitch *toggle = [[UISwitch alloc] init];
         toggle.onTintColor = RL_ORANGE;
         toggle.on = getPrefBool(@"java.auto_ram");
@@ -172,7 +172,7 @@ static NSInteger autoMemoryMB(void) {
     self.playButton.layer.cornerRadius = 14;
     self.playButton.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
     self.playButton.tintColor = UIColor.blackColor;
-    [self.playButton setTitle:@"Играть" forState:UIControlStateNormal];
+    [self.playButton setTitle:@"Play" forState:UIControlStateNormal];
     [self.playButton addTarget:self action:@selector(play) forControlEvents:UIControlEventPrimaryActionTriggered];
     [self.playButton.heightAnchor constraintEqualToConstant:56].active = YES;
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
@@ -195,7 +195,7 @@ static NSInteger autoMemoryMB(void) {
     [stack addArrangedSubview:self.statusLabel];
     [stack setCustomSpacing:24 afterView:self.statusLabel];
 
-    [stack addArrangedSubview:[self makeSecondaryButton:@"Настройки" image:@"gearshape" action:@selector(openSettings)]];
+    [stack addArrangedSubview:[self makeSecondaryButton:@"Settings" image:@"gearshape" action:@selector(openSettings)]];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     NSLayoutConstraint *preferredWidth = [stack.widthAnchor constraintEqualToAnchor:safe.widthAnchor constant:-40];
@@ -315,28 +315,28 @@ static NSInteger autoMemoryMB(void) {
     NSDictionary *session = [JagexAccount current];
     if (!session) {
         self.accountIcon.image = [UIImage systemImageNamed:@"person.crop.circle.badge.plus"];
-        self.accountName.text = @"Войти в аккаунт Jagex";
-        self.accountHint.text = @"Без входа — экран логина RuneScape";
+        self.accountName.text = @"Sign in with a Jagex Account";
+        self.accountHint.text = @"Not signed in: the RuneScape login screen will be shown";
     } else if (!session[@"characterId"]) {
         self.accountIcon.image = [UIImage systemImageNamed:@"person.crop.circle.badge.questionmark"];
-        self.accountName.text = @"Персонаж не выбран";
-        self.accountHint.text = @"Нажмите, чтобы выбрать персонажа";
+        self.accountName.text = @"No Character Selected";
+        self.accountHint.text = @"Tap to choose a character";
     } else {
         self.accountIcon.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
         NSString *name = session[@"displayName"];
-        self.accountName.text = name.length ? name : @"Новый персонаж";
-        self.accountHint.text = @"Аккаунт Jagex · сменить";
+        self.accountName.text = name.length ? name : @"New Character";
+        self.accountHint.text = @"Jagex Account · Change";
     }
 }
 
 - (void)updateStatus {
     if (self.launching) return;
     if (isJITEnabled(false)) {
-        self.statusLabel.text = @"JIT включён";
+        self.statusLabel.text = @"JIT is enabled";
     } else if (getEntitlementValue(@"jb.pmap_cs.custom_trust")) {
-        self.statusLabel.text = @"JIT включится через TrollStore";
+        self.statusLabel.text = @"JIT will be enabled by TrollStore";
     } else {
-        self.statusLabel.text = @"При запуске откроется StikDebug для включения JIT";
+        self.statusLabel.text = @"StikDebug will open to enable JIT when you play";
     }
 }
 
@@ -378,7 +378,7 @@ static NSInteger autoMemoryMB(void) {
 - (void)openSettings {
     RuneLiteSettingsViewController *prefs = [[RuneLiteSettingsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
     prefs.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
-        initWithTitle:@"Готово" style:UIBarButtonItemStyleDone target:self action:@selector(dismissPresented)];
+        initWithTitle:@"Done" style:UIBarButtonItemStyleDone target:self action:@selector(dismissPresented)];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:prefs];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     nav.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
@@ -435,8 +435,8 @@ static NSInteger autoMemoryMB(void) {
         NSURL *stikURL = [NSURL URLWithString:[NSString stringWithFormat:@"stikjit://enable-jit?bundle-id=%@&pid=%d%@", NSBundle.mainBundle.bundleIdentifier, getpid(), scriptDataString]];
         // Without StikDebug installed nothing would ever enable JIT; don't leave the player waiting forever
         if (![UIApplication.sharedApplication canOpenURL:stikURL]) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Нужен StikDebug"
-                message:@"Чтобы RuneLite работал быстро, iOS требует включить JIT через StikDebug, а он не установлен. Установите StikDebug, импортируйте в нём файл сопряжения и запустите RuneLite снова."
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"StikDebug Required"
+                message:@"iOS needs JIT enabled through StikDebug for RuneLite to run at a playable speed, but StikDebug is not installed. Install StikDebug, import your pairing file into it, then launch RuneLite again."
                 preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
             [self presentViewController:alert animated:YES completion:nil];
@@ -447,10 +447,10 @@ static NSInteger autoMemoryMB(void) {
         [UIApplication.sharedApplication openURL:[NSURL URLWithString:[NSString stringWithFormat:@"sidestore://sidejit-enable?pid=%d", getpid()]] options:@{} completionHandler:nil];
     }
 
-    [self setLaunching:YES status:@"Ожидание JIT от StikDebug — игра запустится сама"];
+    [self setLaunching:YES status:@"Waiting for StikDebug to enable JIT. The game will start automatically"];
     // While waiting, Play cancels the wait instead of launching
     self.playButton.enabled = YES;
-    [self.playButton setTitle:@"Отмена" forState:UIControlStateNormal];
+    [self.playButton setTitle:@"Cancel" forState:UIControlStateNormal];
     [self.playButton removeTarget:self action:@selector(play) forControlEvents:UIControlEventPrimaryActionTriggered];
     [self.playButton addTarget:self action:@selector(cancelWait) forControlEvents:UIControlEventPrimaryActionTriggered];
 
@@ -473,7 +473,7 @@ static NSInteger autoMemoryMB(void) {
 }
 
 - (void)restorePlayButton {
-    [self.playButton setTitle:@"Играть" forState:UIControlStateNormal];
+    [self.playButton setTitle:@"Play" forState:UIControlStateNormal];
     [self.playButton removeTarget:self action:@selector(cancelWait) forControlEvents:UIControlEventPrimaryActionTriggered];
     [self.playButton addTarget:self action:@selector(play) forControlEvents:UIControlEventPrimaryActionTriggered];
 }
