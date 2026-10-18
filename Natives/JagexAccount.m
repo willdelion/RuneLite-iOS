@@ -375,6 +375,8 @@ static UIViewController *topPresenter(UIViewController *fallback) {
         [self chooseCharacterForSession:sessionId from:vc sourceView:vc.view completion:completion];
     };
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:login];
+    // The Jagex login page is dark; keep the bar title readable on it
+    nav.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [topPresenter(vc) presentViewController:nav animated:YES completion:nil];
 }

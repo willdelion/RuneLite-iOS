@@ -316,7 +316,7 @@ static NSInteger autoMemoryMB(void) {
     if (!session) {
         self.accountIcon.image = [UIImage systemImageNamed:@"person.crop.circle.badge.plus"];
         self.accountName.text = @"Sign in with a Jagex Account";
-        self.accountHint.text = @"Not signed in: the RuneScape login screen will be shown";
+        self.accountHint.text = @"Or skip and log in inside the game";
     } else if (!session[@"characterId"]) {
         self.accountIcon.image = [UIImage systemImageNamed:@"person.crop.circle.badge.questionmark"];
         self.accountName.text = @"No Character Selected";
