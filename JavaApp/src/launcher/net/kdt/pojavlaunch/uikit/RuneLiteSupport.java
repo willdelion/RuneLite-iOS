@@ -424,12 +424,9 @@ public class RuneLiteSupport {
     /**
      * Switch the game to the Resizable layout on the login screen, so the login screen and the game fill the wide
      * phone screen instead of a stretched 765x503 Fixed frame. The server picks the in-game layout from the client's
-     * mode at login. Skipped when the player turned it off in the launcher settings.
+     * mode at login.
      */
     private static void useResizableLayout(final ClassLoader loader, final Object injector) {
-        if ("0".equals(System.getenv("RUNELITE_IOS_RESIZABLE"))) {
-            return;
-        }
         Thread t = new Thread(() -> {
             try {
                 final Class<?> clientClass = loader.loadClass("net.runelite.api.Client");

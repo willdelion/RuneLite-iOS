@@ -21,14 +21,7 @@
 @property(nonatomic) BOOL launching;
 @end
 
-// Whether to switch the game to its Resizable layout so it fills the wide screen (on unless turned off)
-static NSString *const kResizableLayoutKey = @"RuneLiteResizableLayout";
-static BOOL resizableLayoutEnabled(void) {
-    id value = [NSUserDefaults.standardUserDefaults objectForKey:kResizableLayoutKey];
-    return value ? [value boolValue] : YES;
-}
-
-// Only the settings that matter for RuneLite: how much memory Java may use and the game layout
+// Only the settings that matter for RuneLite: how much memory Java may use
 @interface RuneLiteSettingsViewController : UITableViewController
 @property(nonatomic) UISlider *memorySlider;
 @property(nonatomic) UILabel *memoryLabel;
@@ -79,40 +72,26 @@ static NSInteger autoMemoryMB(void) {
     [self updateMemory];
 }
 
-- (void)resizableChanged:(UISwitch *)sender {
-    [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:kResizableLayoutKey];
-}
-
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;
+    return 1;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return section == 0 ? 2 : 1;
+    return 2;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return section == 0 ? @"RuneLite Memory" : @"Display";
+    return @"RuneLite Memory";
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 1) {
-        return @"Switches the game to its Resizable layout, so the login screen and the game fill the whole screen. Turn off to keep the layout you pick in the game's settings.";
-    }
     return @"More memory means fewer stutters, but iOS may close the game if you allocate too much. Changes apply on the next launch.";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    if (indexPath.section == 1) {
-        cell.textLabel.text = @"Fill the Screen";
-        UISwitch *toggle = [[UISwitch alloc] init];
-        toggle.onTintColor = RL_ORANGE;
-        toggle.on = resizableLayoutEnabled();
-        [toggle addTarget:self action:@selector(resizableChanged:) forControlEvents:UIControlEventValueChanged];
-        cell.accessoryView = toggle;
-    } else if (indexPath.row == 0) {
+    if (indexPath.row == 0) {
         cell.textLabel.text = @"Automatic";
         UISwitch *toggle = [[UISwitch alloc] init];
         toggle.onTintColor = RL_ORANGE;
@@ -424,7 +403,6 @@ static NSInteger autoMemoryMB(void) {
         [fm copyItemAtPath:bundled toPath:jar error:nil];
     }
     setenv("GAME_DIR", dir.UTF8String, 1);
-    setenv("RUNELITE_IOS_RESIZABLE", resizableLayoutEnabled() ? "1" : "0", 1);
     [JagexAccount applyEnvironment];
 
     JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
