@@ -138,7 +138,7 @@ public class RuneLiteSupport {
     }
 
     // Phone-friendly defaults, applied once per RuneLite profile so the player can change them afterwards
-    private static final String DEFAULTS_VERSION = "5";
+    private static final String DEFAULTS_VERSION = "6";
     private static final String[][] DEFAULT_CONFIG = {
         // Fill the whole wide phone screen; fixed mode gets stretched horizontally
         {"stretchedmode", "keepAspectRatio", "false"},
@@ -224,12 +224,15 @@ public class RuneLiteSupport {
         final Method start = pluginManagerClass.getMethod("startPlugin", pluginClass);
         final Method stop = pluginManagerClass.getMethod("stopPlugin", pluginClass);
 
-        // Plugins are registered a bit after the config loads
+        // Plugins are registered gradually after the config loads; wait until the list stops growing.
+        // Plugin Hub plugins (camera smoothing) come later and are covered by DEFAULT_CONFIG instead.
         java.util.Collection<?> plugins = null;
-        for (int i = 0; i < 240; i++) {
-            plugins = (java.util.Collection<?>) getPlugins.invoke(pluginManager);
-            if (!plugins.isEmpty()) break;
+        int lastSize = -1, stable = 0;
+        for (int i = 0; i < 240 && stable < 6; i++) {
             Thread.sleep(500);
+            plugins = (java.util.Collection<?>) getPlugins.invoke(pluginManager);
+            stable = !plugins.isEmpty() && plugins.size() == lastSize ? stable + 1 : 0;
+            lastSize = plugins.size();
         }
         for (final Object plugin : plugins) {
             for (String[] entry : DEFAULT_PLUGINS) {
