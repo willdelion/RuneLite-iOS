@@ -124,9 +124,9 @@ The controls mimic the official OSRS mobile app:
 
 ### Display
 
-- In the default **Fixed** layout the game is scaled up to the full screen height, keeping its proportions, with black bars on the sides.
-- For a game view that fills the whole screen, switch the in-game layout: **Settings (wrench) → Display → Game client layout → Resizable**. The 3D view is then drawn at the screen's own resolution.
-- Upscaling is configured in RuneLite's **Stretched Mode** plugin (enabled by default). Turn *Keep aspect ratio* off there if you prefer a stretched full-width Fixed layout.
+- The game is upscaled to fill the whole screen with RuneLite's **Stretched Mode** plugin (enabled by default). In the default **Fixed** layout the picture is stretched a little wider to cover the wide phone screen.
+- Prefer exact proportions? Open the Stretched Mode plugin settings and turn **Keep aspect ratio** on (black bars appear on the sides).
+- Or switch the in-game layout to **Resizable** (**Settings (wrench) → Display → Game client layout**): the 3D view is then drawn at the screen's own size with no stretching at all.
 
 ## 8. Keeping the app working (7-day signing)
 
